@@ -2,7 +2,7 @@
 
 一个极简的个人精选作者名录，用来展示值得关注的创作者、博客作者和内容源。
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/robustmaster/yipai-picks)
+[![Deploy template to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/robustmaster/yipai-picks)
 
 ## 技术栈
 
@@ -61,13 +61,27 @@ npm run dev
 
 如果你设置了 `ADMIN_TOKEN`，复制 `.dev.vars.example` 为 `.dev.vars` 并修改令牌。打开 `/admin` 后在“管理令牌”里填写同一个值。
 
-## 网页部署
+## 部署当前仓库
 
-推荐使用 Cloudflare 的网页部署按钮：
+如果你要部署当前这个 GitHub 仓库，不要使用下面的 Deploy Button。Cloudflare 的 Deploy Button 会把源仓库当作模板，clone 到你选择的 GitHub/GitLab 账号里并创建一个新仓库。
+
+部署当前仓库更适合走 Cloudflare Dashboard 的 Git 集成：
+
+1. 打开 Cloudflare Dashboard。
+2. 进入 Workers & Pages，创建 Worker 应用。
+3. 选择连接 Git 仓库，并选择 `robustmaster/yipai-picks`。
+4. 确认构建命令使用 `npm run build`，部署命令使用 `npm run deploy`。
+5. 确认 D1 绑定 `DB`、R2 绑定 `IMAGES`、Secret `ADMIN_TOKEN`。
+
+Cloudflare 会在后续 push 到生产分支时自动部署。
+
+## 模板一键部署
+
+如果你想把这个项目作为模板部署成一个新项目，可以使用 Cloudflare 的 Deploy Button：
 
 [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/robustmaster/yipai-picks)
 
-部署时 Cloudflare 会读取 `wrangler.jsonc`，自动创建并绑定需要的 D1 数据库和 R2 bucket。`database_id` 这类值会由 Cloudflare 在部署流程里处理，不需要手动复制。
+这个流程会创建一个新的 Git 仓库，并连接到新的 Cloudflare Worker 应用。部署时 Cloudflare 会读取 `wrangler.jsonc`，自动创建并绑定需要的 D1 数据库和 R2 bucket。`database_id` 这类值会由 Cloudflare 在部署流程里处理，不需要手动复制。
 
 部署页面里只需要重点确认几项：
 
@@ -78,7 +92,7 @@ npm run dev
 
 部署完成后，打开站点的 `/admin`，填入部署时设置的 `ADMIN_TOKEN` 即可管理数据。
 
-这个一键部署方式要求 GitHub 仓库是公开仓库。Cloudflare 官方的 Deploy Button 目前只支持 Workers 应用，不支持 Pages 应用。
+这个一键部署方式要求源仓库是公开仓库。Cloudflare 官方的 Deploy Button 目前只支持 Workers 应用，不支持 Pages 应用。
 
 ## 命令行部署
 
