@@ -23,6 +23,7 @@ type PickRow = {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ADMIN_COOKIE = "yipai_admin_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
+let schemaReady: Promise<void> | null = null;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -96,6 +97,8 @@ export default {
 };
 
 async function listPicks(env: Env): Promise<Response> {
+  await ensureSchema(env);
+
   const { results } = await env.DB.prepare(
     `select id, name, avatar_image, intro, platform, tags, sort_order, created_at, updated_at
      from picks
@@ -106,6 +109,8 @@ async function listPicks(env: Env): Promise<Response> {
 }
 
 async function createPick(request: Request, env: Env): Promise<Response> {
+  await ensureSchema(env);
+
   const input = normalizePickInput(await readJson(request));
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -133,6 +138,8 @@ async function createPick(request: Request, env: Env): Promise<Response> {
 }
 
 async function updatePick(id: string, request: Request, env: Env): Promise<Response> {
+  await ensureSchema(env);
+
   const existing = await getPickById(id, env);
   if (!existing) {
     return json({ error: "Pick not found" }, { status: 404 });
@@ -163,11 +170,15 @@ async function updatePick(id: string, request: Request, env: Env): Promise<Respo
 }
 
 async function deletePick(id: string, env: Env): Promise<Response> {
+  await ensureSchema(env);
+
   await env.DB.prepare("delete from picks where id = ?").bind(id).run();
   return json({ ok: true });
 }
 
 async function getPickById(id: string, env: Env): Promise<PickItem | null> {
+  await ensureSchema(env);
+
   const row = await env.DB.prepare(
     `select id, name, avatar_image, intro, platform, tags, sort_order, created_at, updated_at
      from picks
@@ -227,6 +238,36 @@ async function getMedia(pathname: string, env: Env): Promise<Response> {
   headers.set("cache-control", "public, max-age=31536000, immutable");
 
   return new Response(object.body, { headers });
+}
+
+async function ensureSchema(env: Env): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = createSchema(env).catch((error) => {
+      schemaReady = null;
+      throw error;
+    });
+  }
+
+  return schemaReady;
+}
+
+async function createSchema(env: Env): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(
+      `create table if not exists picks (
+        id text primary key,
+        name text not null,
+        avatar_image text,
+        intro text,
+        platform text not null default '',
+        tags text not null default '[]',
+        sort_order integer not null default 0,
+        created_at text not null,
+        updated_at text not null
+      )`
+    ),
+    env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)")
+  ]);
 }
 
 function normalizePickInput(value: unknown): Required<PickInput> {
