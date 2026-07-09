@@ -2,6 +2,8 @@
 
 一个极简的个人精选作者名录，用来展示值得关注的创作者、博客作者和内容源。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/robustmaster/yipai-picks)
+
 ## 技术栈
 
 - React + Vite
@@ -59,9 +61,28 @@ npm run dev
 
 如果你设置了 `ADMIN_TOKEN`，复制 `.dev.vars.example` 为 `.dev.vars` 并修改令牌。打开 `/admin` 后在“管理令牌”里填写同一个值。
 
-## Cloudflare 部署
+## 网页部署
 
-创建 D1：
+推荐使用 Cloudflare 的网页部署按钮：
+
+[Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/robustmaster/yipai-picks)
+
+部署时 Cloudflare 会读取 `wrangler.jsonc`，自动创建并绑定需要的 D1 数据库和 R2 bucket。`database_id` 这类值会由 Cloudflare 在部署流程里处理，不需要手动复制。
+
+部署页面里只需要重点确认几项：
+
+- Worker 名称，可以保持 `yipai-picks`
+- D1 绑定 `DB`，用于保存推荐列表
+- R2 绑定 `IMAGES`，用于保存头像
+- Secret `ADMIN_TOKEN`，用于保护 `/admin` 后台
+
+部署完成后，打开站点的 `/admin`，填入部署时设置的 `ADMIN_TOKEN` 即可管理数据。
+
+这个一键部署方式要求 GitHub 仓库是公开仓库。Cloudflare 官方的 Deploy Button 目前只支持 Workers 应用，不支持 Pages 应用。
+
+## 命令行部署
+
+如果不用网页部署，也可以手动部署。创建 D1：
 
 ```bash
 npx wrangler d1 create yipai-picks

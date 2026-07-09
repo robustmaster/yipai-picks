@@ -7,9 +7,9 @@
     "build": "vite build",
     "check": "tsc --noEmit && vite build",
     "dev": "wrangler dev --local",
-    "deploy": "npm run build && wrangler deploy",
-    "db:migrate:local": "wrangler d1 migrations apply yipai-picks --local",
-    "db:migrate:remote": "wrangler d1 migrations apply yipai-picks --remote"
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -23,5 +23,18 @@
     "typescript": "^5.8.3",
     "vite": "^7.0.0",
     "wrangler": "^4.24.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 数据库，用来保存推荐作者列表。部署时 Cloudflare 会自动创建并绑定。"
+      },
+      "IMAGES": {
+        "description": "R2 bucket，用来保存后台上传的头像。部署时 Cloudflare 会自动创建并绑定。"
+      },
+      "ADMIN_TOKEN": {
+        "description": "后台管理令牌。部署后打开 /admin 时需要填写同一个值。建议使用一段随机字符串。"
+      }
+    }
   }
 }
