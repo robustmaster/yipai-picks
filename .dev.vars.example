@@ -1,1 +1,2 @@
-ADMIN_TOKEN=replace-with-a-local-admin-token
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-with-a-local-admin-password

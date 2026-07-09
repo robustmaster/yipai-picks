@@ -59,7 +59,7 @@ npm run build
 npm run dev
 ```
 
-如果你设置了 `ADMIN_TOKEN`，复制 `.dev.vars.example` 为 `.dev.vars` 并修改令牌。打开 `/admin` 后在“管理令牌”里填写同一个值。
+复制 `.dev.vars.example` 为 `.dev.vars`，并修改 `ADMIN_PASSWORD`。打开 `/admin` 后使用账号密码登录；`ADMIN_USERNAME` 不设置时默认为 `admin`。
 
 ## 部署当前仓库
 
@@ -71,7 +71,7 @@ npm run dev
 2. 进入 Workers & Pages，创建 Worker 应用。
 3. 选择连接 Git 仓库，并选择 `robustmaster/yipai-picks`。
 4. 确认构建命令使用 `npm run build`，部署命令使用 `npm run deploy`。
-5. 确认 D1 绑定 `DB`、R2 绑定 `IMAGES`、Secret `ADMIN_TOKEN`。
+5. 确认 D1 绑定 `DB`、R2 绑定 `IMAGES`、Secret `ADMIN_PASSWORD`。`ADMIN_USERNAME` 可选，不填时默认为 `admin`。
 
 Cloudflare 会在首次部署时根据 `wrangler.jsonc` 自动创建并绑定 D1 和 R2。后续 push 到生产分支时会自动部署。
 
@@ -88,9 +88,10 @@ Cloudflare 会在首次部署时根据 `wrangler.jsonc` 自动创建并绑定 D1
 - Worker 名称，可以保持 `yipai-picks`
 - D1 绑定 `DB`，用于保存推荐列表
 - R2 绑定 `IMAGES`，用于保存头像
-- Secret `ADMIN_TOKEN`，用于保护 `/admin` 后台
+- Secret `ADMIN_PASSWORD`，用于保护 `/admin` 后台
+- `ADMIN_USERNAME` 可选，不填时后台账号默认为 `admin`
 
-部署完成后，打开站点的 `/admin`，填入部署时设置的 `ADMIN_TOKEN` 即可管理数据。
+部署完成后，打开站点的 `/admin`，使用账号密码登录即可管理数据。
 
 这个一键部署方式要求源仓库是公开仓库。Cloudflare 官方的 Deploy Button 目前只支持 Workers 应用，不支持 Pages 应用。
 
@@ -115,19 +116,28 @@ npx wrangler d1 create yipai-picks
 npx wrangler r2 bucket create yipai-picks-images
 ```
 
-设置后台令牌：
+设置后台密码：
 
 ```bash
-npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put ADMIN_PASSWORD
+```
+
+后台账号默认是 `admin`。如果你想改账号名，可以再设置：
+
+```bash
+npx wrangler secret put ADMIN_USERNAME
 ```
 
 ## API
 
 - `GET /api/picks`: 获取公开列表
+- `POST /api/admin/login`: 后台登录
+- `POST /api/admin/logout`: 后台退出
+- `GET /api/admin/session`: 检查后台登录状态
 - `POST /api/admin/picks`: 新增
 - `PUT /api/admin/picks/:id`: 更新
 - `DELETE /api/admin/picks/:id`: 删除
 - `POST /api/admin/avatar`: 上传头像
 - `GET /media/:key`: 读取头像
 
-后台 API 通过 `ADMIN_TOKEN` 保护。没有设置 `ADMIN_TOKEN` 时，接口会放行，方便本地开发；正式环境建议必须设置该 secret。
+后台 API 通过 HttpOnly Cookie 会话保护。必须配置 `ADMIN_PASSWORD` 后才能登录和写入数据；未配置时后台写接口会拒绝请求。

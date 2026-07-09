@@ -14,6 +14,15 @@ type UploadResponse = {
   url: string;
 };
 
+type SessionResponse = {
+  authenticated: boolean;
+  username: string;
+};
+
+type AdminSession = {
+  username: string;
+};
+
 type PickForm = {
   id?: string;
   name: string;
@@ -49,6 +58,12 @@ function PublicPage() {
     return ["全部", ...Array.from(allTags).sort((a, b) => a.localeCompare(b, "zh-CN"))];
   }, [picks]);
 
+  useEffect(() => {
+    if (!tags.includes(activeTag)) {
+      setActiveTag("全部");
+    }
+  }, [activeTag, tags]);
+
   const filteredPicks = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
@@ -67,24 +82,47 @@ function PublicPage() {
 
   return (
     <main className="page-shell">
-      <header className="site-header">
-        <div>
-          <p className="eyebrow">Yipai Picks</p>
-          <h1>值得关注的人</h1>
-          <p className="lead">整理我认为值得持续关注的创作者、博客作者和内容源。</p>
-        </div>
-        <a className="admin-link" href="/admin">
+      <header className="topbar">
+        <a className="brand" href="/">
+          一派 Picks
+        </a>
+        <a className="nav-link" href="/admin">
           管理
         </a>
       </header>
 
-      <section className="toolbar" aria-label="筛选">
-        <label className="search-field">
+      <section className="hero-band">
+        <div className="hero-copy">
+          <p className="eyebrow">Personal directory</p>
+          <h1>
+            我持续关注的创作者和<span className="nowrap">内容源</span>
+          </h1>
+          <p className="lead">一个更克制的个人名录，只放真正值得回访的人、博客和账号。</p>
+        </div>
+
+        <dl className="hero-stats" aria-label="统计">
+          <div>
+            <dt>{picks.length}</dt>
+            <dd>推荐项</dd>
+          </div>
+          <div>
+            <dt>{Math.max(tags.length - 1, 0)}</dt>
+            <dd>领域标签</dd>
+          </div>
+          <div>
+            <dt>{filteredPicks.length}</dt>
+            <dd>当前结果</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="filter-panel" aria-label="筛选">
+        <label className="search-box">
           <span>搜索</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="名字、平台或简介"
+            placeholder="名字、平台、标签或简介"
           />
         </label>
 
@@ -125,24 +163,27 @@ function PublicPage() {
 function PickCard({ pick }: { pick: PickItem }) {
   return (
     <article className="pick-card">
-      <div className="pick-card-main">
+      <div className="pick-card-head">
         <Avatar pick={pick} />
-        <div>
-          <div className="pick-title-row">
-            <h2>{pick.name}</h2>
-            {pick.platform ? <span className="platform-pill">{pick.platform}</span> : null}
-          </div>
-          {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
+        <div className="pick-heading">
+          <h2>{pick.name}</h2>
+          {pick.platform ? <span>{pick.platform}</span> : null}
         </div>
       </div>
 
-      {pick.tags.length ? (
-        <div className="pick-tags">
-          {pick.tags.map((tag) => (
-            <span key={tag}>#{tag}</span>
-          ))}
-        </div>
-      ) : null}
+      {pick.intro ? <p className="pick-intro">{pick.intro}</p> : <p className="pick-intro muted">暂无简介</p>}
+
+      <div className="pick-card-foot">
+        {pick.tags.length ? (
+          <div className="pick-tags">
+            {pick.tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+        ) : (
+          <span className="muted">未设置标签</span>
+        )}
+      </div>
     </article>
   );
 }
@@ -164,8 +205,14 @@ function PickGridSkeleton() {
     <section className="pick-grid" aria-label="加载中">
       {Array.from({ length: 6 }).map((_, index) => (
         <div className="pick-card skeleton-card" key={index}>
-          <div className="skeleton avatar" />
-          <div className="skeleton skeleton-line wide" />
+          <div className="pick-card-head">
+            <div className="skeleton avatar" />
+            <div className="skeleton-stack">
+              <div className="skeleton skeleton-line wide" />
+              <div className="skeleton skeleton-line short" />
+            </div>
+          </div>
+          <div className="skeleton skeleton-block" />
           <div className="skeleton skeleton-line" />
         </div>
       ))}
@@ -174,24 +221,152 @@ function PickGridSkeleton() {
 }
 
 function AdminPage() {
+  const [session, setSession] = useState<AdminSession | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/admin/session", { credentials: "same-origin" });
+        if (response.status === 401) {
+          if (active) setSession(null);
+          return;
+        }
+
+        const data = await parseResponse<SessionResponse>(response);
+        if (active) {
+          setSession({ username: data.username });
+        }
+      } catch {
+        if (active) setSession(null);
+      } finally {
+        if (active) setChecking(false);
+      }
+    }
+
+    void loadSession();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (checking) {
+    return <AdminStatus title="正在检查登录状态" text="请稍候。" />;
+  }
+
+  if (!session) {
+    return <AdminLogin onSuccess={(nextSession) => setSession(nextSession)} />;
+  }
+
+  return <AdminDashboard session={session} onLogout={() => setSession(null)} />;
+}
+
+function AdminStatus({ title, text }: { title: string; text: string }) {
+  return (
+    <main className="admin-shell centered-shell">
+      <section className="login-panel">
+        <p className="eyebrow">Admin</p>
+        <h1>{title}</h1>
+        <p className="lead">{text}</p>
+      </section>
+    </main>
+  );
+}
+
+function AdminLogin({ onSuccess }: { onSuccess: (session: AdminSession) => void }) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submitLogin(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: jsonHeaders(),
+        credentials: "same-origin",
+        body: JSON.stringify({ username, password })
+      });
+      const data = await parseResponse<SessionResponse>(response);
+      setPassword("");
+      onSuccess({ username: data.username });
+    } catch (loginError) {
+      setMessage(errorMessage(loginError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <main className="admin-shell centered-shell">
+      <section className="login-panel">
+        <div className="login-heading">
+          <p className="eyebrow">Admin</p>
+          <h1>登录后台</h1>
+          <p>使用 Cloudflare 环境变量里配置的用户名和密码。</p>
+        </div>
+
+        <form className="login-form" onSubmit={submitLogin}>
+          <label className="field">
+            <span>账号</span>
+            <input
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+            />
+          </label>
+
+          <label className="field">
+            <span>密码</span>
+            <input
+              autoComplete="current-password"
+              required
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+
+          <button className="primary-button full-button" disabled={saving} type="submit">
+            {saving ? "登录中..." : "登录"}
+          </button>
+          {message ? <p className="form-message error">{message}</p> : null}
+        </form>
+
+        <a className="nav-link" href="/">
+          返回前台
+        </a>
+      </section>
+    </main>
+  );
+}
+
+function AdminDashboard({
+  session,
+  onLogout
+}: {
+  session: AdminSession;
+  onLogout: () => void;
+}) {
   const { picks, loading, error, refresh, setPicks } = usePicks();
-  const [token, setToken] = useState(() => localStorage.getItem("admin_token") ?? "");
   const [form, setForm] = useState<PickForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem("admin_token", token);
-    } else {
-      localStorage.removeItem("admin_token");
-    }
-  }, [token]);
 
   const sortedPicks = useMemo(
     () => [...picks].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "zh-CN")),
     [picks]
   );
+
+  const tagCount = useMemo(() => new Set(picks.flatMap((pick) => pick.tags)).size, [picks]);
 
   function editPick(pick: PickItem) {
     setMessage("");
@@ -204,6 +379,21 @@ function AdminPage() {
       tags: pick.tags.join("，"),
       sort_order: String(pick.sort_order)
     });
+  }
+
+  async function logout() {
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "same-origin"
+    }).catch(() => undefined);
+    onLogout();
+  }
+
+  function handleAdminError(errorValue: unknown) {
+    setMessage(errorMessage(errorValue));
+    if (isUnauthorizedError(errorValue)) {
+      onLogout();
+    }
   }
 
   async function savePick(event: FormEvent) {
@@ -224,7 +414,8 @@ function AdminPage() {
       const url = form.id ? `/api/admin/picks/${form.id}` : "/api/admin/picks";
       const response = await fetch(url, {
         method: form.id ? "PUT" : "POST",
-        headers: adminHeaders(token),
+        headers: jsonHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify(payload)
       });
 
@@ -238,7 +429,7 @@ function AdminPage() {
       setForm(emptyForm);
       setMessage("已保存");
     } catch (saveError) {
-      setMessage(errorMessage(saveError));
+      handleAdminError(saveError);
     } finally {
       setSaving(false);
     }
@@ -250,7 +441,7 @@ function AdminPage() {
     try {
       const response = await fetch(`/api/admin/picks/${pick.id}`, {
         method: "DELETE",
-        headers: adminHeaders(token)
+        credentials: "same-origin"
       });
       await parseResponse<{ ok: boolean }>(response);
       setPicks((current) => current.filter((item) => item.id !== pick.id));
@@ -259,7 +450,7 @@ function AdminPage() {
       }
       setMessage("已删除");
     } catch (deleteError) {
-      setMessage(errorMessage(deleteError));
+      handleAdminError(deleteError);
     }
   }
 
@@ -271,14 +462,14 @@ function AdminPage() {
     try {
       const response = await fetch("/api/admin/avatar", {
         method: "POST",
-        headers: adminHeaders(token, false),
+        credentials: "same-origin",
         body: data
       });
       const upload = await parseResponse<UploadResponse>(response);
       setForm((current) => ({ ...current, avatar_image: upload.key }));
       setMessage("头像已上传");
     } catch (uploadError) {
-      setMessage(errorMessage(uploadError));
+      handleAdminError(uploadError);
     }
   }
 
@@ -288,22 +479,32 @@ function AdminPage() {
         <div>
           <p className="eyebrow">Admin</p>
           <h1>管理 Picks</h1>
+          <p className="lead">维护公开页展示的创作者、平台和领域标签。</p>
         </div>
-        <a className="admin-link" href="/">
-          返回前台
-        </a>
+        <div className="admin-actions">
+          <span className="session-badge">{session.username}</span>
+          <button className="secondary-button" type="button" onClick={() => void logout()}>
+            退出
+          </button>
+          <a className="nav-link" href="/">
+            前台
+          </a>
+        </div>
       </header>
 
-      <section className="admin-token">
-        <label className="field">
-          <span>管理令牌</span>
-          <input
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            placeholder="如果设置了 ADMIN_TOKEN，在这里填写"
-            type="password"
-          />
-        </label>
+      <section className="admin-overview" aria-label="概览">
+        <div>
+          <strong>{picks.length}</strong>
+          <span>推荐项</span>
+        </div>
+        <div>
+          <strong>{tagCount}</strong>
+          <span>标签</span>
+        </div>
+        <div>
+          <strong>{form.id ? "编辑" : "新增"}</strong>
+          <span>当前模式</span>
+        </div>
       </section>
 
       <div className="admin-layout">
@@ -316,23 +517,25 @@ function AdminPage() {
           </div>
 
           <form className="pick-form" onSubmit={savePick}>
-            <label className="field">
-              <span>名字</span>
-              <input
-                required
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-              />
-            </label>
+            <div className="form-grid">
+              <label className="field">
+                <span>名字</span>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                />
+              </label>
 
-            <label className="field">
-              <span>平台</span>
-              <input
-                value={form.platform}
-                onChange={(event) => setForm({ ...form, platform: event.target.value })}
-                placeholder="B站、抖音、微信公众号、博客"
-              />
-            </label>
+              <label className="field">
+                <span>平台</span>
+                <input
+                  value={form.platform}
+                  onChange={(event) => setForm({ ...form, platform: event.target.value })}
+                  placeholder="B站、抖音、微信公众号、博客"
+                />
+              </label>
+            </div>
 
             <label className="field">
               <span>简介</span>
@@ -343,43 +546,62 @@ function AdminPage() {
               />
             </label>
 
-            <label className="field">
-              <span>标签</span>
-              <input
-                value={form.tags}
-                onChange={(event) => setForm({ ...form, tags: event.target.value })}
-                placeholder="政治，体育，心理"
-              />
-            </label>
+            <div className="form-grid">
+              <label className="field">
+                <span>标签</span>
+                <input
+                  value={form.tags}
+                  onChange={(event) => setForm({ ...form, tags: event.target.value })}
+                  placeholder="政治，体育，心理"
+                />
+              </label>
 
-            <label className="field">
-              <span>排序</span>
-              <input
-                inputMode="numeric"
-                value={form.sort_order}
-                onChange={(event) => setForm({ ...form, sort_order: event.target.value })}
-              />
-            </label>
+              <label className="field">
+                <span>排序</span>
+                <input
+                  inputMode="numeric"
+                  value={form.sort_order}
+                  onChange={(event) => setForm({ ...form, sort_order: event.target.value })}
+                />
+              </label>
+            </div>
 
-            <label className="field">
-              <span>头像</span>
-              <input
-                accept="image/*"
-                type="file"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void uploadAvatar(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-
-            {form.avatar_image ? (
+            <div className="avatar-upload">
               <div className="avatar-preview">
-                <img src={`/media/${form.avatar_image}`} alt="头像预览" />
-                <code>{form.avatar_image}</code>
+                {form.avatar_image ? (
+                  <>
+                    <img src={`/media/${form.avatar_image}`} alt="头像预览" />
+                    <code>{form.avatar_image}</code>
+                  </>
+                ) : (
+                  <span className="muted">尚未上传头像</span>
+                )}
               </div>
-            ) : null}
+
+              <div className="upload-actions">
+                <label className="file-button">
+                  上传头像
+                  <input
+                    accept="image/*"
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadAvatar(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {form.avatar_image ? (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, avatar_image: "" }))}
+                  >
+                    移除
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             <div className="form-actions">
               <button className="primary-button" disabled={saving} type="submit">
@@ -409,7 +631,7 @@ function AdminPage() {
                   <Avatar pick={pick} />
                   <div>
                     <h3>{pick.name}</h3>
-                    <p>{[pick.platform, pick.tags.join(" / ")].filter(Boolean).join(" · ")}</p>
+                    <p>{[pick.platform, pick.tags.join(" / ")].filter(Boolean).join(" · ") || "未设置平台和标签"}</p>
                   </div>
                   <div className="row-actions">
                     <button className="text-button" type="button" onClick={() => editPick(pick)}>
@@ -440,7 +662,7 @@ function usePicks() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/picks");
+      const response = await fetch("/api/picks", { credentials: "same-origin" });
       const data = await parseResponse<PicksResponse>(response);
       setPicks(data.picks);
     } catch (fetchError) {
@@ -482,18 +704,22 @@ function StatusBlock({
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  const data = (await response.json()) as T & { error?: string };
+  const contentType = response.headers.get("content-type") ?? "";
+  const data = contentType.includes("application/json")
+    ? ((await response.json()) as T & { error?: string })
+    : ({} as T & { error?: string });
+
   if (!response.ok) {
-    throw new Error(data.error || `Request failed with ${response.status}`);
+    throw new ApiError(data.error || `Request failed with ${response.status}`, response.status);
   }
+
   return data;
 }
 
-function adminHeaders(token: string, includeJson = true): HeadersInit {
-  const headers: Record<string, string> = {};
-  if (includeJson) headers["content-type"] = "application/json";
-  if (token) headers.authorization = `Bearer ${token}`;
-  return headers;
+function jsonHeaders(): HeadersInit {
+  return {
+    "content-type": "application/json"
+  };
 }
 
 function splitTags(tags: string): string[] {
@@ -509,4 +735,17 @@ function splitTags(tags: string): string[] {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "操作失败";
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number
+  ) {
+    super(message);
+  }
 }
