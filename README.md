@@ -71,9 +71,11 @@ npm run dev
 2. 进入 Workers & Pages，创建 Worker 应用。
 3. 选择连接 Git 仓库，并选择 `robustmaster/yipai-picks`。
 4. 确认构建命令使用 `npm run build`，部署命令使用 `npm run deploy`。
-5. 确认 D1 绑定 `DB`、R2 绑定 `IMAGES`、Secret `ADMIN_PASSWORD`。`ADMIN_USERNAME` 可选，不填时默认为 `admin`。
+5. 在 Worker 的 `Settings` -> `Variables and Secrets` 里添加运行时 Secret `ADMIN_PASSWORD`。`ADMIN_USERNAME` 可选，不填时默认为 `admin`。
 
 Cloudflare 会在首次部署时根据 `wrangler.jsonc` 自动创建并绑定 D1 和 R2。后续 push 到生产分支时会自动部署。
+
+注意：`Settings` -> `Build` 里的 `Build variables and secrets` 只在构建和部署命令执行时可用，Worker 运行时读不到。后台登录必须配置在 Worker 的 `Settings` -> `Variables and Secrets`。
 
 ## 模板一键部署
 
@@ -140,4 +142,4 @@ npx wrangler secret put ADMIN_USERNAME
 - `POST /api/admin/avatar`: 上传头像
 - `GET /media/:key`: 读取头像
 
-后台 API 通过 HttpOnly Cookie 会话保护。必须配置 `ADMIN_PASSWORD` 后才能登录和写入数据；未配置时后台写接口会拒绝请求。
+后台 API 通过 HttpOnly Cookie 会话保护。必须配置运行时 Secret `ADMIN_PASSWORD` 后才能登录和写入数据；未配置时后台写接口会拒绝请求。
