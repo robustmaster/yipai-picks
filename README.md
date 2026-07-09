@@ -73,7 +73,7 @@ npm run dev
 4. 确认构建命令使用 `npm run build`，部署命令使用 `npm run deploy`。
 5. 确认 D1 绑定 `DB`、R2 绑定 `IMAGES`、Secret `ADMIN_TOKEN`。
 
-Cloudflare 会在后续 push 到生产分支时自动部署。
+Cloudflare 会在首次部署时根据 `wrangler.jsonc` 自动创建并绑定 D1 和 R2。后续 push 到生产分支时会自动部署。
 
 ## 模板一键部署
 
@@ -96,36 +96,29 @@ Cloudflare 会在后续 push 到生产分支时自动部署。
 
 ## 命令行部署
 
-如果不用网页部署，也可以手动部署。创建 D1：
+如果不用网页部署，也可以手动部署。首次部署会自动创建 D1 和 R2：
+
+```bash
+npm run build
+npm run deploy
+```
+
+如果你想提前手动创建 D1，也可以执行：
 
 ```bash
 npx wrangler d1 create yipai-picks
 ```
 
-把输出里的 `database_id` 填到 `wrangler.jsonc`。
-
-创建 R2 bucket：
+然后把输出里的 `database_id` 填到 `wrangler.jsonc`。手动创建 R2：
 
 ```bash
 npx wrangler r2 bucket create yipai-picks-images
-```
-
-应用远程数据库迁移：
-
-```bash
-npm run db:migrate:remote
 ```
 
 设置后台令牌：
 
 ```bash
 npx wrangler secret put ADMIN_TOKEN
-```
-
-部署：
-
-```bash
-npm run deploy
 ```
 
 ## API

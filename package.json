@@ -7,7 +7,7 @@
     "build": "vite build",
     "check": "tsc --noEmit && vite build",
     "dev": "wrangler dev --local",
-    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "deploy": "wrangler deploy && npm run db:migrate:remote",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
