@@ -1,4 +1,4 @@
-import type { PickInput, PickItem } from "./shared/types";
+import type { PickInput, PickItem, PickLinkType } from "./shared/types";
 
 type Env = {
   ASSETS: Fetcher;
@@ -14,6 +14,8 @@ type PickRow = {
   avatar_image: string | null;
   intro: string | null;
   platform: string | null;
+  link_type: PickLinkType | null;
+  link_value: string | null;
   tags: string;
   sort_order: number | null;
   created_at: string;
@@ -73,7 +75,13 @@ export default {
       if (pathname === "/api/admin/avatar" && request.method === "POST") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return uploadAvatar(request, env);
+        return uploadImage(request, env, "avatars");
+      }
+
+      if (pathname === "/api/admin/link-image" && request.method === "POST") {
+        const adminResponse = await requireAdmin(request, env);
+        if (adminResponse) return adminResponse;
+        return uploadImage(request, env, "links");
       }
 
       if (pathname.startsWith("/media/") && request.method === "GET") {
@@ -100,7 +108,7 @@ async function listPicks(env: Env): Promise<Response> {
   await ensureSchema(env);
 
   const { results } = await env.DB.prepare(
-    `select id, name, avatar_image, intro, platform, tags, sort_order, created_at, updated_at
+    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at
      from picks
      order by sort_order asc, created_at desc`
   ).all<PickRow>();
@@ -117,8 +125,8 @@ async function createPick(request: Request, env: Env): Promise<Response> {
 
   await env.DB.prepare(
     `insert into picks
-       (id, name, avatar_image, intro, platform, tags, sort_order, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at)
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -126,6 +134,8 @@ async function createPick(request: Request, env: Env): Promise<Response> {
       input.avatar_image,
       input.intro,
       input.platform,
+      input.link_type,
+      input.link_value,
       JSON.stringify(input.tags),
       input.sort_order,
       now,
@@ -150,7 +160,7 @@ async function updatePick(id: string, request: Request, env: Env): Promise<Respo
 
   await env.DB.prepare(
     `update picks
-     set name = ?, avatar_image = ?, intro = ?, platform = ?, tags = ?, sort_order = ?, updated_at = ?
+     set name = ?, avatar_image = ?, intro = ?, platform = ?, link_type = ?, link_value = ?, tags = ?, sort_order = ?, updated_at = ?
      where id = ?`
   )
     .bind(
@@ -158,6 +168,8 @@ async function updatePick(id: string, request: Request, env: Env): Promise<Respo
       input.avatar_image,
       input.intro,
       input.platform,
+      input.link_type,
+      input.link_value,
       JSON.stringify(input.tags),
       input.sort_order,
       now,
@@ -180,7 +192,7 @@ async function getPickById(id: string, env: Env): Promise<PickItem | null> {
   await ensureSchema(env);
 
   const row = await env.DB.prepare(
-    `select id, name, avatar_image, intro, platform, tags, sort_order, created_at, updated_at
+    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at
      from picks
      where id = ?`
   )
@@ -190,7 +202,7 @@ async function getPickById(id: string, env: Env): Promise<PickItem | null> {
   return row ? toPickItem(row) : null;
 }
 
-async function uploadAvatar(request: Request, env: Env): Promise<Response> {
+async function uploadImage(request: Request, env: Env, folder: "avatars" | "links"): Promise<Response> {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > MAX_IMAGE_BYTES) {
     return json({ error: "Image must be smaller than 5MB" }, { status: 413 });
@@ -210,7 +222,7 @@ async function uploadAvatar(request: Request, env: Env): Promise<Response> {
     return json({ error: "Image must be smaller than 5MB" }, { status: 413 });
   }
 
-  const key = `avatars/${crypto.randomUUID()}.${extensionFromMime(file.type)}`;
+  const key = `${folder}/${crypto.randomUUID()}.${extensionFromMime(file.type)}`;
   await env.IMAGES.put(key, file.stream(), {
     httpMetadata: {
       contentType: file.type,
@@ -252,22 +264,38 @@ async function ensureSchema(env: Env): Promise<void> {
 }
 
 async function createSchema(env: Env): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      `create table if not exists picks (
+  await env.DB.prepare(
+    `create table if not exists picks (
         id text primary key,
         name text not null,
         avatar_image text,
         intro text,
         platform text not null default '',
+        link_type text not null default '',
+        link_value text,
         tags text not null default '[]',
         sort_order integer not null default 0,
         created_at text not null,
         updated_at text not null
       )`
-    ),
-    env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)")
+  ).run();
+
+  await ensureColumns(env, [
+    ["link_type", "alter table picks add column link_type text not null default ''"],
+    ["link_value", "alter table picks add column link_value text"]
   ]);
+
+  await env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)").run();
+}
+
+async function ensureColumns(env: Env, columns: [string, string][]): Promise<void> {
+  const { results } = await env.DB.prepare("pragma table_info(picks)").all<{ name: string }>();
+  const existingColumns = new Set((results ?? []).map((column) => column.name));
+  const missingColumns = columns.filter(([name]) => !existingColumns.has(name));
+
+  if (!missingColumns.length) return;
+
+  await env.DB.batch(missingColumns.map(([, statement]) => env.DB.prepare(statement)));
 }
 
 function normalizePickInput(value: unknown): Required<PickInput> {
@@ -277,11 +305,15 @@ function normalizePickInput(value: unknown): Required<PickInput> {
     throw new HttpError("Name is required", 400);
   }
 
+  const link = normalizePickLink(input.link_type, input.link_value);
+
   return {
     name,
     avatar_image: nullableString(input.avatar_image),
     intro: nullableString(input.intro),
     platform: stringValue(input.platform).trim(),
+    link_type: link.type,
+    link_value: link.value,
     tags: normalizeTags(input.tags),
     sort_order: normalizeSortOrder(input.sort_order)
   };
@@ -297,11 +329,29 @@ function toPickItem(row: PickRow): PickItem {
     avatar_url: avatarImage ? `/media/${avatarImage}` : null,
     intro: row.intro || null,
     platform: row.platform || "",
+    link_type: normalizePickLinkType(row.link_type),
+    link_value: row.link_value || null,
     tags: parseTags(row.tags),
     sort_order: row.sort_order ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
+}
+
+function normalizePickLink(type: unknown, value: unknown): { type: PickLinkType; value: string | null } {
+  const linkType = normalizePickLinkType(type);
+  const linkValue = nullableString(value);
+
+  if (!linkType || !linkValue) {
+    return { type: "", value: null };
+  }
+
+  return { type: linkType, value: linkValue };
+}
+
+function normalizePickLinkType(value: unknown): PickLinkType {
+  const type = stringValue(value).trim();
+  return type === "url" || type === "image" || type === "text" ? type : "";
 }
 
 async function readJson(request: Request): Promise<unknown> {

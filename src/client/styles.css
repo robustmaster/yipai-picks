@@ -46,6 +46,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -391,15 +392,21 @@ p {
 }
 
 .text-button,
-.danger-button {
+.danger-button,
+.link-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: var(--accent);
   padding: 0;
   font-weight: 800;
+  text-decoration: none;
 }
 
-.text-button:hover {
+.text-button:hover,
+.link-action:hover {
   color: var(--accent-strong);
 }
 
@@ -408,7 +415,8 @@ p {
 }
 
 .card-actions .text-button,
-.card-actions .danger-button {
+.card-actions .danger-button,
+.card-actions .link-action {
   min-height: 30px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -421,7 +429,8 @@ p {
     color 140ms ease;
 }
 
-.card-actions .text-button:hover {
+.card-actions .text-button:hover,
+.card-actions .link-action:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -533,6 +542,7 @@ p {
 }
 
 .field input,
+.field select,
 .field textarea {
   width: 100%;
   border: 1px solid var(--line-strong);
@@ -547,11 +557,27 @@ p {
     box-shadow 140ms ease;
 }
 
+.field select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+  padding-right: 32px;
+}
+
 .field textarea {
   resize: vertical;
 }
 
 .field input:focus,
+.field select:focus,
 .field textarea:focus {
   border-color: var(--accent);
   background: var(--surface);
@@ -579,6 +605,13 @@ p {
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(251, 253, 251, 0.95), rgba(246, 248, 246, 0.95));
   padding: 12px;
+}
+
+.link-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
 }
 
 .avatar-preview {
@@ -648,6 +681,36 @@ p {
   overflow: auto;
   padding: 20px;
   box-shadow: var(--shadow-lift);
+}
+
+.link-modal {
+  width: min(520px, 100%);
+}
+
+.link-image-preview {
+  display: block;
+  width: min(360px, 100%);
+  max-height: 68vh;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-soft);
+}
+
+.link-text-value {
+  max-height: 45vh;
+  margin: 0 0 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
 }
 
 .modal-heading {

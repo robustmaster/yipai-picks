@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
-import type { PickInput, PickItem } from "../shared/types";
+import type { PickInput, PickItem, PickLinkType } from "../shared/types";
 
 type PicksResponse = {
   picks: PickItem[];
@@ -29,6 +29,8 @@ type PickForm = {
   avatar_image: string;
   intro: string;
   platform: string;
+  link_type: PickLinkType;
+  link_value: string;
   tags: string;
   sort_order: string;
 };
@@ -43,6 +45,8 @@ const emptyForm: PickForm = {
   avatar_image: "",
   intro: "",
   platform: "",
+  link_type: "",
+  link_value: "",
   tags: "",
   sort_order: "0"
 };
@@ -157,6 +161,8 @@ function PickGrid({
 }
 
 function PickCard({ actions, pick }: { actions?: ReactNode; pick: PickItem }) {
+  const hasActions = Boolean(actions) || hasPickLink(pick);
+
   return (
     <article className="pick-card">
       <div className="pick-card-head">
@@ -179,9 +185,76 @@ function PickCard({ actions, pick }: { actions?: ReactNode; pick: PickItem }) {
         ) : (
           <span className="muted">未设置标签</span>
         )}
-        {actions ? <div className="card-actions">{actions}</div> : null}
+        {hasActions ? (
+          <div className="card-actions">
+            <PickLinkAction pick={pick} />
+            {actions}
+          </div>
+        ) : null}
       </div>
     </article>
+  );
+}
+
+function PickLinkAction({ pick }: { pick: PickItem }) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  if (!hasPickLink(pick)) return null;
+
+  if (pick.link_type === "url") {
+    return (
+      <a className="link-action" href={normalizeHref(pick.link_value)} rel="noreferrer" target="_blank">
+        访问
+      </a>
+    );
+  }
+
+  return (
+    <>
+      <button className="link-action" type="button" onClick={() => setViewerOpen(true)}>
+        {pick.link_type === "image" ? "图片" : "文本"}
+      </button>
+      {viewerOpen ? <PickLinkModal onClose={() => setViewerOpen(false)} pick={pick} /> : null}
+    </>
+  );
+}
+
+function PickLinkModal({ onClose, pick }: { onClose: () => void; pick: PickItem }) {
+  const [copied, setCopied] = useState(false);
+  const linkValue = pick.link_value ?? "";
+
+  async function copyText() {
+    await navigator.clipboard.writeText(linkValue);
+    setCopied(true);
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      role="presentation"
+    >
+      <section aria-label={`${pick.name} 链接`} aria-modal="true" className="modal-panel link-modal" role="dialog">
+        <div className="modal-heading">
+          <h2>{pick.name}</h2>
+          <button className="secondary-button" type="button" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+
+        {pick.link_type === "image" ? (
+          <img className="link-image-preview" src={`/media/${linkValue}`} alt={`${pick.name} 链接图片`} />
+        ) : (
+          <>
+            <pre className="link-text-value">{linkValue}</pre>
+            <button className="primary-button compact-button" type="button" onClick={() => void copyText()}>
+              {copied ? "已复制" : "复制"}
+            </button>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -482,6 +555,8 @@ function PickEditorModal({
       avatar_image: form.avatar_image || null,
       intro: form.intro || null,
       platform: form.platform,
+      link_type: form.link_type,
+      link_value: form.link_value || null,
       tags: splitTags(form.tags),
       sort_order: Number(form.sort_order) || 0
     };
@@ -518,6 +593,25 @@ function PickEditorModal({
       const upload = await parseResponse<UploadResponse>(response);
       setForm((current) => ({ ...current, avatar_image: upload.key }));
       setMessage("头像已上传");
+    } catch (uploadError) {
+      handleError(uploadError);
+    }
+  }
+
+  async function uploadLinkImage(file: File) {
+    setMessage("");
+    const data = new FormData();
+    data.set("file", file);
+
+    try {
+      const response = await fetch("/api/admin/link-image", {
+        method: "POST",
+        credentials: "same-origin",
+        body: data
+      });
+      const upload = await parseResponse<UploadResponse>(response);
+      setForm((current) => ({ ...current, link_value: upload.key }));
+      setMessage("链接图片已上传");
     } catch (uploadError) {
       handleError(uploadError);
     }
@@ -626,6 +720,86 @@ function PickEditorModal({
             </div>
           </div>
 
+          <div className="link-editor">
+            <div className="form-grid">
+              <label className="field">
+                <span>链接类型</span>
+                <select
+                  value={form.link_type}
+                  onChange={(event) =>
+                    setForm({ ...form, link_type: event.target.value as PickLinkType, link_value: "" })
+                  }
+                >
+                  <option value="">不设置</option>
+                  <option value="url">URL</option>
+                  <option value="image">图片</option>
+                  <option value="text">文本</option>
+                </select>
+              </label>
+
+              {form.link_type === "url" ? (
+                <label className="field">
+                  <span>URL</span>
+                  <input
+                    value={form.link_value}
+                    onChange={(event) => setForm({ ...form, link_value: event.target.value })}
+                    placeholder="https://example.com"
+                  />
+                </label>
+              ) : null}
+            </div>
+
+            {form.link_type === "text" ? (
+              <label className="field">
+                <span>文本</span>
+                <textarea
+                  value={form.link_value}
+                  onChange={(event) => setForm({ ...form, link_value: event.target.value })}
+                  rows={3}
+                />
+              </label>
+            ) : null}
+
+            {form.link_type === "image" ? (
+              <div className="avatar-upload">
+                <div className="avatar-preview">
+                  {form.link_value ? (
+                    <>
+                      <img src={`/media/${form.link_value}`} alt="链接图片预览" />
+                      <code>{form.link_value}</code>
+                    </>
+                  ) : (
+                    <span className="muted">尚未上传链接图片</span>
+                  )}
+                </div>
+
+                <div className="upload-actions">
+                  <label className="file-button">
+                    上传图片
+                    <input
+                      accept="image/*"
+                      type="file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadLinkImage(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  {form.link_value ? (
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, link_value: "" }))}
+                    >
+                      移除
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <div className="form-actions">
             <button className="primary-button" disabled={saving} type="submit">
               {saving ? "保存中..." : "保存"}
@@ -694,9 +868,19 @@ function pickToForm(pick: PickItem): PickForm {
     avatar_image: pick.avatar_image ?? "",
     intro: pick.intro ?? "",
     platform: pick.platform,
+    link_type: pick.link_type,
+    link_value: pick.link_value ?? "",
     tags: pick.tags.join("，"),
     sort_order: String(pick.sort_order)
   };
+}
+
+function hasPickLink(pick: PickItem): pick is PickItem & { link_value: string } {
+  return Boolean(pick.link_type && pick.link_value);
+}
+
+function normalizeHref(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
 
 function StatusBlock({

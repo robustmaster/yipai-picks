@@ -22,6 +22,8 @@ create table picks (
   avatar_image text,
   intro text,
   platform text not null default '',
+  link_type text not null default '',
+  link_value text,
   tags text not null default '[]',
   sort_order integer not null default 0,
   created_at text not null,
@@ -35,6 +37,8 @@ create table picks (
 - `avatar_image`: R2 里的头像 key
 - `intro`: 简介
 - `platform`: 主要平台，例如 B站、抖音、微信公众号、博客
+- `link_type`: 链接类型，空值表示不设置；可选 `url`、`image`、`text`
+- `link_value`: 链接内容。`url` 存 URL，`image` 存 R2 图片 key，`text` 存普通文本
 - `tags`: 领域标签，只用于筛选，例如政治、体育、心理
 - `sort_order`: 排序，数字越小越靠前
 
@@ -140,6 +144,7 @@ npx wrangler secret put ADMIN_USERNAME
 - `PUT /api/admin/picks/:id`: 更新
 - `DELETE /api/admin/picks/:id`: 删除
 - `POST /api/admin/avatar`: 上传头像
-- `GET /media/:key`: 读取头像
+- `POST /api/admin/link-image`: 上传链接图片
+- `GET /media/:key`: 读取头像或链接图片
 
 后台 API 通过 HttpOnly Cookie 会话保护。必须配置运行时 Secret `ADMIN_PASSWORD` 后才能登录和写入数据；未配置时后台写接口会拒绝请求。
