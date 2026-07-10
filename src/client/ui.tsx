@@ -112,10 +112,11 @@ export function Button({
 }
 
 export function IconButton({
+  className = "",
   label,
   ...props
 }: Omit<ButtonProps, "children"> & { label: string }) {
-  return <Button aria-label={label} className="icon-button" title={label} {...props} />;
+  return <Button aria-label={label} className={`icon-button ${className}`.trim()} title={label} {...props} />;
 }
 
 export function Dialog({

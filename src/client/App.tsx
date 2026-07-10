@@ -161,10 +161,19 @@ function PickGrid({
 }
 
 function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: PickItem }) {
-  const hasActions = Boolean(onEdit) || hasPickLink(pick);
-
   return (
     <article className={onEdit ? "pick-card admin-pick-card" : "pick-card"}>
+      {onEdit ? (
+        <IconButton
+          className="card-edit-button"
+          icon={<Pencil aria-hidden="true" size={15} />}
+          label={`编辑 ${pick.name}`}
+          onClick={() => onEdit(pick)}
+          size="sm"
+          type="button"
+          variant="secondary"
+        />
+      ) : null}
       <div className="pick-card-head">
         <Avatar pick={pick} />
         <div className="pick-heading">
@@ -172,32 +181,16 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
           {pick.platform ? <span>{pick.platform}</span> : null}
         </div>
       </div>
-      {pick.intro ? <p className="pick-intro">{pick.intro}</p> : <p className="pick-intro muted">暂无简介</p>}
+      <p className="pick-intro">{pick.intro ?? ""}</p>
       <div className="pick-card-foot">
-        {pick.tags.length ? (
-          <div className="pick-tags">
-            {pick.tags.map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-        ) : (
-          <span className="muted">未设置标签</span>
-        )}
-        {hasActions ? (
+        <div className="pick-tags">
+          {pick.tags.map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </div>
+        {hasPickLink(pick) ? (
           <div className="card-actions">
             <PickLinkAction pick={pick} />
-            {onEdit ? (
-              <Button
-                className="card-edit-button"
-                icon={<Pencil aria-hidden="true" size={14} />}
-                onClick={() => onEdit(pick)}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                编辑
-              </Button>
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -343,7 +336,7 @@ function AdminPage() {
 
   if (checking) return <AdminStatus />;
   if (!session) return <AdminLogin onSuccess={setSession} />;
-  return <AdminDashboard onLogout={() => setSession(null)} />;
+  return <AdminDashboard onUnauthorized={() => setSession(null)} />;
 }
 
 function AdminStatus() {
@@ -423,7 +416,7 @@ function AdminLogin({ onSuccess }: { onSuccess: (session: AdminSession) => void 
   );
 }
 
-function AdminDashboard({ onLogout }: { onLogout: () => void }) {
+function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const { picks, loading, error, refresh, setPicks } = usePicks();
   const { activeTag, filteredPicks, setActiveTag, tags } = useTagFilter(picks);
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -435,7 +428,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
-    onLogout();
+    window.location.assign("/");
   }
 
   function handleSaved(savedPick: PickItem) {
@@ -478,7 +471,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             setEditor(null);
           }}
           onSaved={handleSaved}
-          onUnauthorized={onLogout}
+          onUnauthorized={onUnauthorized}
         />
       ) : null}
     </main>
