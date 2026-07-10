@@ -827,7 +827,7 @@ function PickEditorDialog({
       {confirmDelete ? (
         <ConfirmDialog
           confirmLabel="删除"
-          description={`删除「${form.name}」后无法恢复，已上传的图片暂不会从存储中自动清理。`}
+          description={`删除「${form.name}」后无法恢复，关联且未被其他推荐项使用的图片也会被自动清理。`}
           loading={deleting}
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => void deletePick()}

@@ -11,6 +11,9 @@
   "secrets": {
     "required": ["ADMIN_PASSWORD"]
   },
+  "triggers": {
+    "crons": ["0 19 * * *"]
+  },
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,

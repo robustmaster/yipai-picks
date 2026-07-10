@@ -79,6 +79,8 @@ npm run dev
 
 Cloudflare 会在首次部署时根据 `wrangler.jsonc` 自动创建并绑定 D1 和 R2。后续 push 到生产分支时会自动部署。
 
+图片会随推荐项自动清理：更新或删除推荐项后，Worker 会删除不再被任何记录引用的旧图片；每天北京时间 03:00 还会扫描一次 R2，删除上传超过 24 小时且仍未被引用的孤儿图片。这样也能处理上传后取消编辑、保存失败或浏览器意外关闭产生的残留文件。
+
 注意：`Settings` -> `Build` 里的 `Build variables and secrets` 只在构建和部署命令执行时可用，Worker 运行时读不到。后台登录必须配置在 Worker 的 `Settings` -> `Variables and Secrets`。
 
 ## 模板一键部署

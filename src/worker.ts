@@ -22,13 +22,21 @@ type PickRow = {
   updated_at: string;
 };
 
+type PickImageFields = {
+  avatar_image: string | null;
+  link_type: PickLinkType | null;
+  link_value: string | null;
+};
+type PickImageReferenceRow = Pick<PickRow, "avatar_image" | "link_type" | "link_value">;
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ORPHAN_IMAGE_GRACE_MS = 24 * 60 * 60 * 1000;
 const ADMIN_COOKIE = "yipai_admin_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
 let schemaReady: Promise<void> | null = null;
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       const url = new URL(request.url);
       const { pathname } = url;
@@ -63,13 +71,13 @@ export default {
       if (pickMatch && request.method === "PUT") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return updatePick(pickMatch[1], request, env);
+        return updatePick(pickMatch[1], request, env, ctx);
       }
 
       if (pickMatch && request.method === "DELETE") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return deletePick(pickMatch[1], env);
+        return deletePick(pickMatch[1], env, ctx);
       }
 
       if (pathname === "/api/admin/avatar" && request.method === "POST") {
@@ -101,8 +109,16 @@ export default {
       console.error(error);
       return json({ error: "Internal server error" }, { status: 500 });
     }
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      cleanupOrphanedImages(env, controller.scheduledTime).catch((error) => {
+        console.error("Scheduled image cleanup failed", error);
+      })
+    );
   }
-};
+} satisfies ExportedHandler<Env>;
 
 async function listPicks(env: Env): Promise<Response> {
   await ensureSchema(env);
@@ -147,7 +163,7 @@ async function createPick(request: Request, env: Env): Promise<Response> {
   return json({ pick }, { status: 201 });
 }
 
-async function updatePick(id: string, request: Request, env: Env): Promise<Response> {
+async function updatePick(id: string, request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   await ensureSchema(env);
 
   const existing = await getPickById(id, env);
@@ -156,6 +172,8 @@ async function updatePick(id: string, request: Request, env: Env): Promise<Respo
   }
 
   const input = normalizePickInput(await readJson(request));
+  const previousImageKeys = imageKeysForPick(existing);
+  const nextImageKeys = new Set(imageKeysForPick(input));
   const now = new Date().toISOString();
 
   await env.DB.prepare(
@@ -177,14 +195,24 @@ async function updatePick(id: string, request: Request, env: Env): Promise<Respo
     )
     .run();
 
+  scheduleUnreferencedImageCleanup(
+    ctx,
+    env,
+    previousImageKeys.filter((key) => !nextImageKeys.has(key))
+  );
+
   const pick = await getPickById(id, env);
   return json({ pick });
 }
 
-async function deletePick(id: string, env: Env): Promise<Response> {
+async function deletePick(id: string, env: Env, ctx: ExecutionContext): Promise<Response> {
   await ensureSchema(env);
 
+  const existing = await getPickById(id, env);
   await env.DB.prepare("delete from picks where id = ?").bind(id).run();
+  if (existing) {
+    scheduleUnreferencedImageCleanup(ctx, env, imageKeysForPick(existing));
+  }
   return json({ ok: true });
 }
 
@@ -250,6 +278,77 @@ async function getMedia(pathname: string, env: Env): Promise<Response> {
   headers.set("cache-control", "public, max-age=31536000, immutable");
 
   return new Response(object.body, { headers });
+}
+
+function scheduleUnreferencedImageCleanup(ctx: ExecutionContext, env: Env, keys: string[]): void {
+  const candidates = Array.from(new Set(keys.filter(isManagedImageKey)));
+  if (!candidates.length) return;
+
+  ctx.waitUntil(
+    deleteUnreferencedImageKeys(env, candidates).catch((error) => {
+      console.error("Immediate image cleanup failed", { keys: candidates, error });
+    })
+  );
+}
+
+async function deleteUnreferencedImageKeys(env: Env, candidates: string[]): Promise<number> {
+  const referencedKeys = await getReferencedImageKeys(env);
+  const unreferencedKeys = candidates.filter((key) => !referencedKeys.has(key));
+  if (!unreferencedKeys.length) return 0;
+
+  await env.IMAGES.delete(unreferencedKeys);
+  console.log("Deleted unreferenced R2 images", { keys: unreferencedKeys });
+  return unreferencedKeys.length;
+}
+
+async function cleanupOrphanedImages(env: Env, scheduledTime: number): Promise<void> {
+  const referencedKeys = await getReferencedImageKeys(env);
+  const cutoff = scheduledTime - ORPHAN_IMAGE_GRACE_MS;
+  let cursor: string | undefined;
+  let scanned = 0;
+  let deleted = 0;
+
+  do {
+    const page = await env.IMAGES.list({ cursor, limit: 1000 });
+    scanned += page.objects.length;
+
+    const orphanedKeys = page.objects
+      .filter(
+        (object) =>
+          isManagedImageKey(object.key) && object.uploaded.getTime() <= cutoff && !referencedKeys.has(object.key)
+      )
+      .map((object) => object.key);
+
+    if (orphanedKeys.length) {
+      await env.IMAGES.delete(orphanedKeys);
+      deleted += orphanedKeys.length;
+    }
+
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  console.log("Completed scheduled R2 image cleanup", { scanned, deleted });
+}
+
+async function getReferencedImageKeys(env: Env): Promise<Set<string>> {
+  await ensureSchema(env);
+  const { results } = await env.DB.prepare("select avatar_image, link_type, link_value from picks").all<PickImageReferenceRow>();
+  const keys = new Set<string>();
+
+  for (const row of results ?? []) {
+    for (const key of imageKeysForPick(row)) {
+      keys.add(key);
+    }
+  }
+
+  return keys;
+}
+
+function imageKeysForPick(pick: PickImageFields): string[] {
+  const keys: string[] = [];
+  if (isManagedImageKey(pick.avatar_image)) keys.push(pick.avatar_image);
+  if (pick.link_type === "image" && isManagedImageKey(pick.link_value)) keys.push(pick.link_value);
+  return Array.from(new Set(keys));
 }
 
 async function ensureSchema(env: Env): Promise<void> {
@@ -587,6 +686,14 @@ function extensionFromMime(mime: string): string {
 
 function isSafeObjectKey(key: string): boolean {
   return Boolean(key) && !key.startsWith("/") && !key.includes("..");
+}
+
+function isManagedImageKey(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    isSafeObjectKey(value) &&
+    (value.startsWith("avatars/") || value.startsWith("links/"))
+  );
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
