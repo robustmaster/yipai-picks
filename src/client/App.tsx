@@ -177,8 +177,15 @@ function PickGrid({
 }
 
 function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: PickItem }) {
+  const introId = `pick-intro-${pick.id}`;
+  const intro = pick.intro?.trim() || "暂无简介";
+
   return (
-    <article className={onEdit ? "pick-card admin-pick-card" : "pick-card"}>
+    <article
+      aria-describedby={introId}
+      className={onEdit ? "pick-card admin-pick-card" : "pick-card"}
+      tabIndex={0}
+    >
       {onEdit ? (
         <IconButton
           className="card-edit-button"
@@ -197,7 +204,6 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
           {pick.platform ? <span>{pick.platform}</span> : null}
         </div>
       </div>
-      <p className="pick-intro">{pick.intro ?? ""}</p>
       <div className="pick-card-foot">
         <div className="pick-tags">
           {pick.tags.map((tag) => (
@@ -209,6 +215,9 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
             <PickLinkAction pick={pick} />
           </div>
         ) : null}
+      </div>
+      <div className="pick-intro-tooltip" id={introId} role="tooltip">
+        <span>{intro}</span>
       </div>
     </article>
   );
@@ -316,8 +325,10 @@ function PickGridSkeleton() {
               <div className="skeleton skeleton-line short" />
             </div>
           </div>
-          <div className="skeleton skeleton-block" />
-          <div className="skeleton skeleton-line" />
+          <div className="pick-card-foot">
+            <div className="skeleton skeleton-pill" />
+            <div className="skeleton skeleton-action" />
+          </div>
         </div>
       ))}
     </section>

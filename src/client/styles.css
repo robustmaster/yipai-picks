@@ -311,8 +311,8 @@ p {
 
 .pick-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .pick-card,
@@ -327,10 +327,9 @@ p {
 .pick-card {
   position: relative;
   display: flex;
-  min-height: 216px;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 14px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease,
@@ -339,6 +338,7 @@ p {
 
 .pick-card:hover,
 .pick-card:focus-within {
+  z-index: 3;
   border-color: var(--line-strong);
   box-shadow: 0 2px 4px rgba(21, 38, 33, 0.05), 0 14px 30px rgba(21, 38, 33, 0.07);
   transform: translateY(-1px);
@@ -346,15 +346,18 @@ p {
 
 .pick-card-head {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
-  padding-right: 36px;
+}
+
+.admin-pick-card .pick-card-head {
+  padding-right: 34px;
 }
 
 .avatar {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border: 1px solid var(--line);
   border-radius: 8px;
   object-fit: cover;
@@ -377,7 +380,7 @@ p {
   margin: 0;
   color: var(--ink);
   overflow-wrap: anywhere;
-  font-size: 1.04rem;
+  font-size: 0.98rem;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -395,20 +398,63 @@ p {
   font-weight: 700;
 }
 
-.pick-intro {
-  flex: 1;
-  margin-bottom: 0;
-  color: #4c5b56;
-  font-size: 0.94rem;
-  line-height: 1.65;
-}
-
 .pick-card-foot {
   display: flex;
   min-height: 36px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.pick-intro-tooltip {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% - 5px);
+  right: 10px;
+  left: 10px;
+  visibility: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #1e2a27;
+  box-shadow: 0 14px 34px rgba(17, 30, 27, 0.2);
+  color: #ffffff;
+  padding: 10px 11px;
+  opacity: 0;
+  pointer-events: none;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 0s linear 120ms;
+}
+
+.pick-intro-tooltip > span {
+  position: relative;
+  display: block;
+  max-height: 124px;
+  overflow: auto;
+}
+
+.pick-intro-tooltip::before {
+  position: absolute;
+  top: -5px;
+  left: 18px;
+  width: 9px;
+  height: 9px;
+  background: #1e2a27;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.pick-card:hover .pick-intro-tooltip,
+.pick-card:focus-visible .pick-intro-tooltip {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 520ms;
 }
 
 .pick-tags {
@@ -455,8 +501,8 @@ p {
 .admin-pick-card > .card-edit-button {
   position: absolute;
   z-index: 1;
-  top: 16px;
-  right: 16px;
+  top: 12px;
+  right: 12px;
   opacity: 0;
   transition: opacity 150ms ease;
 }
@@ -513,8 +559,16 @@ p {
   width: 44%;
 }
 
-.skeleton-block {
-  height: 62px;
+.skeleton-pill {
+  width: 52px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.skeleton-action {
+  width: 54px;
+  height: 32px;
+  margin-left: auto;
   border-radius: 8px;
 }
 
@@ -969,6 +1023,12 @@ p {
   }
 }
 
+@media (max-width: 720px) {
+  .pick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 620px) {
   .pick-grid,
   .form-grid {
@@ -976,7 +1036,6 @@ p {
   }
 
   .pick-card {
-    min-height: 198px;
     padding: 16px;
   }
 
