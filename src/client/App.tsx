@@ -21,11 +21,13 @@ import {
   Type,
   Upload
 } from "lucide-react";
-import type { PickInput, PickItem, PickLinkType } from "../shared/types";
+import { DEFAULT_SITE_SETTINGS } from "../shared/types";
+import type { PickInput, PickItem, PickLinkType, SiteSettings, SiteSettingsInput } from "../shared/types";
 import { Button, ConfirmDialog, Dialog, IconButton, ToastProvider, useToast } from "./ui";
 
 type PicksResponse = { picks: PickItem[] };
 type PickResponse = { pick: PickItem };
+type SiteSettingsResponse = { settings: SiteSettings };
 type UploadResponse = { key: string; url: string };
 type SessionResponse = { authenticated: boolean; username: string };
 type AdminSession = { username: string };
@@ -43,6 +45,7 @@ type PickForm = {
 };
 
 type PickFormErrors = Partial<Record<"name" | "link_value", string>>;
+type SiteSettingsErrors = Partial<Record<keyof SiteSettings, string>>;
 type EditorState = { mode: "create" | "edit"; form: PickForm };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -64,6 +67,7 @@ export default function App() {
 
 function PublicPage() {
   const { picks, loading, error, refresh } = usePicks();
+  const { settings } = useSiteSettings();
   const { activeTag, filteredPicks, setActiveTag, tags } = useTagFilter(picks);
 
   return (
@@ -75,6 +79,7 @@ function PublicPage() {
             <span>管理</span>
           </a>
         }
+        settings={settings}
       />
       <TagFilter activeTag={activeTag} onChange={setActiveTag} tags={tags} />
       <PickGrid
@@ -89,12 +94,23 @@ function PublicPage() {
   );
 }
 
-function Topbar({ actions }: { actions: ReactNode }) {
+function Topbar({ actions, settings }: { actions: ReactNode; settings: SiteSettings }) {
   return (
     <header className="topbar">
-      <a className="brand" href="/">
-        一派 Picks
-      </a>
+      <div className="brand-group">
+        <a className="brand" href="/">
+          {settings.site_name}
+        </a>
+        {settings.owner_label ? (
+          settings.owner_url ? (
+            <a className="brand-owner" href={settings.owner_url} rel="noreferrer" target="_blank">
+              {settings.owner_label}
+            </a>
+          ) : (
+            <span className="brand-owner">{settings.owner_label}</span>
+          )
+        ) : null}
+      </div>
       <div className="topbar-actions">{actions}</div>
     </header>
   );
@@ -418,8 +434,10 @@ function AdminLogin({ onSuccess }: { onSuccess: (session: AdminSession) => void 
 
 function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const { picks, loading, error, refresh, setPicks } = usePicks();
+  const { settings, setSettings } = useSiteSettings();
   const { activeTag, filteredPicks, setActiveTag, tags } = useTagFilter(picks);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const sortedPicks = useMemo(
     () => [...filteredPicks].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "zh-CN")),
@@ -447,9 +465,10 @@ function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
             <Button icon={<Plus aria-hidden="true" size={16} />} onClick={() => setEditor({ mode: "create", form: emptyForm })} size="sm" variant="primary">
               新增
             </Button>
-            <AdminMenu onLogout={() => void logout()} />
+            <AdminMenu onLogout={() => void logout()} onOpenSettings={() => setSettingsOpen(true)} />
           </>
         }
+        settings={settings}
       />
       <TagFilter activeTag={activeTag} onChange={setActiveTag} tags={tags} />
       <PickGrid
@@ -474,11 +493,22 @@ function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
           onUnauthorized={onUnauthorized}
         />
       ) : null}
+      {settingsOpen ? (
+        <SiteSettingsDialog
+          initialSettings={settings}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(savedSettings) => {
+            setSettings(savedSettings);
+            setSettingsOpen(false);
+          }}
+          onUnauthorized={onUnauthorized}
+        />
+      ) : null}
     </main>
   );
 }
 
-function AdminMenu({ onLogout }: { onLogout: () => void }) {
+function AdminMenu({ onLogout, onOpenSettings }: { onLogout: () => void; onOpenSettings: () => void }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -502,12 +532,155 @@ function AdminMenu({ onLogout }: { onLogout: () => void }) {
       />
       {open ? (
         <div className="account-popover" role="menu">
+          <Button
+            icon={<Settings aria-hidden="true" size={16} />}
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            网站设置
+          </Button>
           <Button icon={<LogOut aria-hidden="true" size={16} />} onClick={onLogout} size="sm" variant="ghost">
             退出登录
           </Button>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SiteSettingsDialog({
+  initialSettings,
+  onClose,
+  onSaved,
+  onUnauthorized
+}: {
+  initialSettings: SiteSettings;
+  onClose: () => void;
+  onSaved: (settings: SiteSettings) => void;
+  onUnauthorized: () => void;
+}) {
+  const { showToast } = useToast();
+  const [form, setForm] = useState<SiteSettings>(initialSettings);
+  const [errors, setErrors] = useState<SiteSettingsErrors>({});
+  const [saving, setSaving] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const dirty = JSON.stringify(form) !== JSON.stringify(initialSettings);
+  const validationErrors = validateSiteSettings(form);
+  const valid = Object.keys(validationErrors).length === 0;
+
+  function requestClose() {
+    if (saving) return;
+    if (dirty) setConfirmDiscard(true);
+    else onClose();
+  }
+
+  function validateField(field: keyof SiteSettings) {
+    const nextErrors = validateSiteSettings(form);
+    setErrors((current) => ({ ...current, [field]: nextErrors[field] }));
+  }
+
+  async function saveSettings(event: FormEvent) {
+    event.preventDefault();
+    const nextErrors = validateSiteSettings(form);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    const payload: SiteSettingsInput = {
+      site_name: form.site_name.trim(),
+      owner_label: form.owner_label.trim(),
+      owner_url: form.owner_url.trim()
+    };
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: jsonHeaders(),
+        credentials: "same-origin",
+        body: JSON.stringify(payload)
+      });
+      const data = await parseResponse<SiteSettingsResponse>(response);
+      showToast("网站设置已保存", "success");
+      onSaved(data.settings);
+    } catch (error) {
+      if (isUnauthorizedError(error)) onUnauthorized();
+      showToast(errorMessage(error), "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Dialog
+        footer={
+          <div className="dialog-footer-actions">
+            <Button onClick={requestClose} type="button" variant="secondary">
+              取消
+            </Button>
+            <Button
+              disabled={!dirty || !valid}
+              form="site-settings-form"
+              loading={saving}
+              type="submit"
+              variant="primary"
+            >
+              保存
+            </Button>
+          </div>
+        }
+        onClose={requestClose}
+        size="sm"
+        title="网站设置"
+      >
+        <form className="pick-form" id="site-settings-form" onSubmit={saveSettings}>
+          <Field label="网站名称" error={errors.site_name}>
+            <input
+              data-autofocus
+              maxLength={60}
+              onBlur={() => validateField("site_name")}
+              onChange={(event) => setForm((current) => ({ ...current, site_name: event.target.value }))}
+              placeholder="一派 Picks"
+              value={form.site_name}
+            />
+          </Field>
+          <Field label="署名文字" error={errors.owner_label}>
+            <input
+              maxLength={40}
+              onBlur={() => validateField("owner_label")}
+              onChange={(event) => setForm((current) => ({ ...current, owner_label: event.target.value }))}
+              placeholder="@胡一派"
+              value={form.owner_label}
+            />
+          </Field>
+          <Field label="署名链接" error={errors.owner_url}>
+            <input
+              maxLength={500}
+              onBlur={() => validateField("owner_url")}
+              onChange={(event) => setForm((current) => ({ ...current, owner_url: event.target.value }))}
+              placeholder="https://yipai.me"
+              type="url"
+              value={form.owner_url}
+            />
+          </Field>
+        </form>
+      </Dialog>
+
+      {confirmDiscard ? (
+        <ConfirmDialog
+          confirmLabel="放弃修改"
+          description="当前网站设置尚未保存，关闭后将无法恢复。"
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={onClose}
+          tone="danger"
+          title="放弃未保存的修改？"
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -932,6 +1105,32 @@ function usePicks() {
   return { picks, setPicks, loading, error, refresh };
 }
 
+function useSiteSettings() {
+  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/settings", { credentials: "same-origin" });
+        const data = await parseResponse<SiteSettingsResponse>(response);
+        if (active) setSettings(data.settings);
+      } catch {
+        // Defaults keep the header usable if settings cannot be loaded.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    document.title = settings.site_name;
+  }, [settings.site_name]);
+
+  return { settings, setSettings };
+}
+
 function useTagFilter(picks: PickItem[]) {
   const [activeTag, setActiveTag] = useState("全部");
   const tags = useMemo(() => {
@@ -999,6 +1198,28 @@ function validatePickForm(form: PickForm): PickFormErrors {
       errors.link_value = "请输入有效的 URL";
     }
   }
+  return errors;
+}
+
+function validateSiteSettings(settings: SiteSettings): SiteSettingsErrors {
+  const errors: SiteSettingsErrors = {};
+  const siteName = settings.site_name.trim();
+  const ownerLabel = settings.owner_label.trim();
+  const ownerUrl = settings.owner_url.trim();
+
+  if (!siteName) errors.site_name = "请输入网站名称";
+  else if (siteName.length > 60) errors.site_name = "网站名称不能超过 60 个字符";
+  if (ownerLabel.length > 40) errors.owner_label = "署名文字不能超过 40 个字符";
+
+  if (ownerUrl) {
+    try {
+      const url = new URL(ownerUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") errors.owner_url = "仅支持 HTTP 或 HTTPS URL";
+    } catch {
+      errors.owner_url = "请输入有效的 URL";
+    }
+  }
+
   return errors;
 }
 

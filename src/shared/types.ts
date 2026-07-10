@@ -25,3 +25,17 @@ export type PickInput = {
   tags?: string[];
   sort_order?: number;
 };
+
+export type SiteSettings = {
+  site_name: string;
+  owner_label: string;
+  owner_url: string;
+};
+
+export type SiteSettingsInput = SiteSettings;
+
+export const DEFAULT_SITE_SETTINGS: SiteSettings = {
+  site_name: "一派 Picks",
+  owner_label: "@胡一派",
+  owner_url: "https://yipai.me"
+};

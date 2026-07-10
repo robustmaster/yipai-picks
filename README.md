@@ -13,7 +13,7 @@
 
 ## 数据模型
 
-当前只保留一张表：
+推荐数据保存在 `picks` 表：
 
 ```sql
 create table picks (
@@ -41,6 +41,8 @@ create table picks (
 - `link_value`: 链接内容。`url` 存 URL，`image` 存 R2 图片 key，`text` 存普通文本
 - `tags`: 领域标签，只用于筛选，例如政治、体育、心理
 - `sort_order`: 排序，数字越小越靠前
+
+`site_settings` 是固定 `id = 1` 的单例设置表，用来保存网站名称、署名文字和署名链接。登录后台后，可从右上角账户菜单进入“网站设置”修改。
 
 ## 本地开发
 
@@ -139,12 +141,14 @@ npx wrangler secret put ADMIN_USERNAME
 ## API
 
 - `GET /api/picks`: 获取公开列表
+- `GET /api/settings`: 获取公开网站设置
 - `POST /api/admin/login`: 后台登录
 - `POST /api/admin/logout`: 后台退出
 - `GET /api/admin/session`: 检查后台登录状态
 - `POST /api/admin/picks`: 新增
 - `PUT /api/admin/picks/:id`: 更新
 - `DELETE /api/admin/picks/:id`: 删除
+- `PUT /api/admin/settings`: 更新网站设置
 - `POST /api/admin/avatar`: 上传头像
 - `POST /api/admin/link-image`: 上传链接图片
 - `GET /media/:key`: 读取头像或链接图片

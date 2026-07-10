@@ -69,25 +69,54 @@ p {
 
 .page-shell,
 .admin-shell {
-  width: min(1120px, calc(100% - 40px));
+  width: 100%;
+  max-width: 800px;
   margin: 0 auto;
-  padding: 18px 0 64px;
+  padding: 18px 20px 64px;
 }
 
 .topbar {
   display: flex;
-  min-height: 62px;
+  min-height: 60px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin: 0 -20px;
   border-bottom: 1px solid var(--line);
+  padding: 0 20px;
+}
+
+.brand-group {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 2px;
 }
 
 .brand {
   color: var(--ink);
-  font-size: 1.03rem;
-  font-weight: 800;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
   text-decoration: none;
+}
+
+.brand-owner {
+  flex: 0 0 auto;
+  color: #ff9500;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.brand-owner:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .topbar-actions {
@@ -936,20 +965,11 @@ p {
 @media (max-width: 900px) {
   .page-shell,
   .admin-shell {
-    width: min(100% - 28px, 1120px);
     padding-top: 12px;
   }
 }
 
 @media (max-width: 620px) {
-  .topbar {
-    min-height: 54px;
-  }
-
-  .brand {
-    font-size: 0.98rem;
-  }
-
   .pick-grid,
   .form-grid {
     grid-template-columns: 1fr;

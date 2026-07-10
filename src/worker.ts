@@ -1,4 +1,5 @@
-import type { PickInput, PickItem, PickLinkType } from "./shared/types";
+import { DEFAULT_SITE_SETTINGS } from "./shared/types";
+import type { PickInput, PickItem, PickLinkType, SiteSettings, SiteSettingsInput } from "./shared/types";
 
 type Env = {
   ASSETS: Fetcher;
@@ -28,6 +29,7 @@ type PickImageFields = {
   link_value: string | null;
 };
 type PickImageReferenceRow = Pick<PickRow, "avatar_image" | "link_type" | "link_value">;
+type SiteSettingsRow = SiteSettings & { updated_at: string };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ORPHAN_IMAGE_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -42,11 +44,15 @@ export default {
       const { pathname } = url;
 
       if (pathname === "/api/picks" && request.method === "GET") {
-        return listPicks(env);
+        return await listPicks(env);
+      }
+
+      if (pathname === "/api/settings" && request.method === "GET") {
+        return await getSiteSettings(env);
       }
 
       if (pathname === "/api/admin/login" && request.method === "POST") {
-        return loginAdmin(request, env);
+        return await loginAdmin(request, env);
       }
 
       if (pathname === "/api/admin/logout" && request.method === "POST") {
@@ -64,43 +70,49 @@ export default {
       if (pathname === "/api/admin/picks" && request.method === "POST") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return createPick(request, env);
+        return await createPick(request, env);
+      }
+
+      if (pathname === "/api/admin/settings" && request.method === "PUT") {
+        const adminResponse = await requireAdmin(request, env);
+        if (adminResponse) return adminResponse;
+        return await updateSiteSettings(request, env);
       }
 
       const pickMatch = pathname.match(/^\/api\/admin\/picks\/([^/]+)$/);
       if (pickMatch && request.method === "PUT") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return updatePick(pickMatch[1], request, env, ctx);
+        return await updatePick(pickMatch[1], request, env, ctx);
       }
 
       if (pickMatch && request.method === "DELETE") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return deletePick(pickMatch[1], env, ctx);
+        return await deletePick(pickMatch[1], env, ctx);
       }
 
       if (pathname === "/api/admin/avatar" && request.method === "POST") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return uploadImage(request, env, "avatars");
+        return await uploadImage(request, env, "avatars");
       }
 
       if (pathname === "/api/admin/link-image" && request.method === "POST") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return uploadImage(request, env, "links");
+        return await uploadImage(request, env, "links");
       }
 
       if (pathname.startsWith("/media/") && request.method === "GET") {
-        return getMedia(pathname, env);
+        return await getMedia(pathname, env);
       }
 
       if (pathname.startsWith("/api/")) {
         return json({ error: "Not found" }, { status: 404 });
       }
 
-      return env.ASSETS.fetch(request);
+      return await env.ASSETS.fetch(request);
     } catch (error) {
       if (error instanceof HttpError) {
         return json({ error: error.message }, { status: error.status });
@@ -130,6 +142,41 @@ async function listPicks(env: Env): Promise<Response> {
   ).all<PickRow>();
 
   return json({ picks: (results ?? []).map(toPickItem) });
+}
+
+async function getSiteSettings(env: Env): Promise<Response> {
+  return json({ settings: await readSiteSettings(env) });
+}
+
+async function updateSiteSettings(request: Request, env: Env): Promise<Response> {
+  await ensureSchema(env);
+  const settings = normalizeSiteSettings(await readJson(request));
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `insert into site_settings (id, site_name, owner_label, owner_url, updated_at)
+     values (1, ?, ?, ?, ?)
+     on conflict(id) do update set
+       site_name = excluded.site_name,
+       owner_label = excluded.owner_label,
+       owner_url = excluded.owner_url,
+       updated_at = excluded.updated_at`
+  )
+    .bind(settings.site_name, settings.owner_label, settings.owner_url, now)
+    .run();
+
+  return json({ settings });
+}
+
+async function readSiteSettings(env: Env): Promise<SiteSettings> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    "select site_name, owner_label, owner_url, updated_at from site_settings where id = 1"
+  ).first<SiteSettingsRow>();
+
+  return row
+    ? { site_name: row.site_name, owner_label: row.owner_label, owner_url: row.owner_url }
+    : DEFAULT_SITE_SETTINGS;
 }
 
 async function createPick(request: Request, env: Env): Promise<Response> {
@@ -384,7 +431,30 @@ async function createSchema(env: Env): Promise<void> {
     ["link_value", "alter table picks add column link_value text"]
   ]);
 
-  await env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)").run();
+  await env.DB.batch([
+    env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)"),
+    env.DB.prepare(
+      `create table if not exists site_settings (
+         id integer primary key check (id = 1),
+         site_name text not null,
+         owner_label text not null default '',
+         owner_url text not null default '',
+         updated_at text not null
+       )`
+    )
+  ]);
+
+  await env.DB.prepare(
+    `insert or ignore into site_settings (id, site_name, owner_label, owner_url, updated_at)
+     values (1, ?, ?, ?, ?)`
+  )
+    .bind(
+      DEFAULT_SITE_SETTINGS.site_name,
+      DEFAULT_SITE_SETTINGS.owner_label,
+      DEFAULT_SITE_SETTINGS.owner_url,
+      new Date().toISOString()
+    )
+    .run();
 }
 
 async function ensureColumns(env: Env, columns: [string, string][]): Promise<void> {
@@ -416,6 +486,31 @@ function normalizePickInput(value: unknown): Required<PickInput> {
     tags: normalizeTags(input.tags),
     sort_order: normalizeSortOrder(input.sort_order)
   };
+}
+
+function normalizeSiteSettings(value: unknown): SiteSettingsInput {
+  const input = isRecord(value) ? value : {};
+  const siteName = stringValue(input.site_name).trim();
+  const ownerLabel = stringValue(input.owner_label).trim();
+  const ownerUrl = stringValue(input.owner_url).trim();
+
+  if (!siteName) throw new HttpError("Site name is required", 400);
+  if (siteName.length > 60) throw new HttpError("Site name must be 60 characters or fewer", 400);
+  if (ownerLabel.length > 40) throw new HttpError("Owner label must be 40 characters or fewer", 400);
+  if (ownerUrl.length > 500) throw new HttpError("Owner URL must be 500 characters or fewer", 400);
+
+  if (ownerUrl) {
+    try {
+      const url = new URL(ownerUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Unsupported protocol");
+      }
+    } catch {
+      throw new HttpError("Owner URL must be a valid HTTP or HTTPS URL", 400);
+    }
+  }
+
+  return { site_name: siteName, owner_label: ownerLabel, owner_url: ownerUrl };
 }
 
 function toPickItem(row: PickRow): PickItem {
