@@ -18,7 +18,6 @@ type PickRow = {
   link_type: PickLinkType | null;
   link_value: string | null;
   tags: string;
-  sort_order: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -136,9 +135,9 @@ async function listPicks(env: Env): Promise<Response> {
   await ensureSchema(env);
 
   const { results } = await env.DB.prepare(
-    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at
+    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, created_at, updated_at
      from picks
-     order by sort_order asc, created_at desc`
+     order by random()`
   ).all<PickRow>();
 
   return json({ picks: (results ?? []).map(toPickItem) });
@@ -188,8 +187,8 @@ async function createPick(request: Request, env: Env): Promise<Response> {
 
   await env.DB.prepare(
     `insert into picks
-       (id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, avatar_image, intro, platform, link_type, link_value, tags, created_at, updated_at)
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -200,7 +199,6 @@ async function createPick(request: Request, env: Env): Promise<Response> {
       input.link_type,
       input.link_value,
       JSON.stringify(input.tags),
-      input.sort_order,
       now,
       now
     )
@@ -225,7 +223,7 @@ async function updatePick(id: string, request: Request, env: Env, ctx: Execution
 
   await env.DB.prepare(
     `update picks
-     set name = ?, avatar_image = ?, intro = ?, platform = ?, link_type = ?, link_value = ?, tags = ?, sort_order = ?, updated_at = ?
+     set name = ?, avatar_image = ?, intro = ?, platform = ?, link_type = ?, link_value = ?, tags = ?, updated_at = ?
      where id = ?`
   )
     .bind(
@@ -236,7 +234,6 @@ async function updatePick(id: string, request: Request, env: Env, ctx: Execution
       input.link_type,
       input.link_value,
       JSON.stringify(input.tags),
-      input.sort_order,
       now,
       id
     )
@@ -267,7 +264,7 @@ async function getPickById(id: string, env: Env): Promise<PickItem | null> {
   await ensureSchema(env);
 
   const row = await env.DB.prepare(
-    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, sort_order, created_at, updated_at
+    `select id, name, avatar_image, intro, platform, link_type, link_value, tags, created_at, updated_at
      from picks
      where id = ?`
   )
@@ -431,18 +428,15 @@ async function createSchema(env: Env): Promise<void> {
     ["link_value", "alter table picks add column link_value text"]
   ]);
 
-  await env.DB.batch([
-    env.DB.prepare("create index if not exists idx_picks_sort_order on picks (sort_order, created_at)"),
-    env.DB.prepare(
-      `create table if not exists site_settings (
-         id integer primary key check (id = 1),
-         site_name text not null,
-         owner_label text not null default '',
-         owner_url text not null default '',
-         updated_at text not null
-       )`
-    )
-  ]);
+  await env.DB.prepare(
+    `create table if not exists site_settings (
+       id integer primary key check (id = 1),
+       site_name text not null,
+       owner_label text not null default '',
+       owner_url text not null default '',
+       updated_at text not null
+     )`
+  ).run();
 
   await env.DB.prepare(
     `insert or ignore into site_settings (id, site_name, owner_label, owner_url, updated_at)
@@ -483,8 +477,7 @@ function normalizePickInput(value: unknown): Required<PickInput> {
     platform: stringValue(input.platform).trim(),
     link_type: link.type,
     link_value: link.value,
-    tags: normalizeTags(input.tags),
-    sort_order: normalizeSortOrder(input.sort_order)
+    tags: normalizeTags(input.tags)
   };
 }
 
@@ -526,7 +519,6 @@ function toPickItem(row: PickRow): PickItem {
     link_type: normalizePickLinkType(row.link_type),
     link_value: row.link_value || null,
     tags: parseTags(row.tags),
-    sort_order: row.sort_order ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -742,11 +734,6 @@ function parseTags(value: string): string[] {
   } catch {
     return [];
   }
-}
-
-function normalizeSortOrder(value: unknown): number {
-  const numberValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numberValue) ? Math.trunc(numberValue) : 0;
 }
 
 function nullableString(value: unknown): string | null {

@@ -25,7 +25,6 @@ create table picks (
   link_type text not null default '',
   link_value text,
   tags text not null default '[]',
-  sort_order integer not null default 0,
   created_at text not null,
   updated_at text not null
 );
@@ -40,7 +39,8 @@ create table picks (
 - `link_type`: 链接类型，空值表示不设置；可选 `url`、`image`、`text`
 - `link_value`: 链接内容。`url` 存 URL，`image` 存 R2 图片 key，`text` 存普通文本
 - `tags`: 领域标签，只用于筛选，例如政治、体育、心理
-- `sort_order`: 排序，数字越小越靠前
+
+公开列表每次加载时随机排列，不提供手动排序。
 
 `site_settings` 是固定 `id = 1` 的单例设置表，用来保存网站名称、署名文字和署名链接。登录后台后，可从右上角账户菜单进入“网站设置”修改。
 

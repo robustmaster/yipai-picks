@@ -41,7 +41,6 @@ type PickForm = {
   link_type: PickLinkType;
   link_value: string;
   tags: string;
-  sort_order: string;
 };
 
 type PickFormErrors = Partial<Record<"name" | "link_value", string>>;
@@ -56,8 +55,7 @@ const emptyForm: PickForm = {
   platform: "",
   link_type: "",
   link_value: "",
-  tags: "",
-  sort_order: "0"
+  tags: ""
 };
 
 export default function App() {
@@ -177,15 +175,8 @@ function PickGrid({
 }
 
 function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: PickItem }) {
-  const introId = `pick-intro-${pick.id}`;
-  const intro = pick.intro?.trim() || "暂无简介";
-
   return (
-    <article
-      aria-describedby={introId}
-      className={onEdit ? "pick-card admin-pick-card" : "pick-card"}
-      tabIndex={0}
-    >
+    <article className={onEdit ? "pick-card admin-pick-card" : "pick-card"}>
       {onEdit ? (
         <IconButton
           className="card-edit-button"
@@ -204,6 +195,7 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
           {pick.platform ? <span>{pick.platform}</span> : null}
         </div>
       </div>
+      {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
       <div className="pick-card-foot">
         <div className="pick-tags">
           {pick.tags.map((tag) => (
@@ -215,9 +207,6 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
             <PickLinkAction pick={pick} />
           </div>
         ) : null}
-      </div>
-      <div className="pick-intro-tooltip" id={introId} role="tooltip">
-        <span>{intro}</span>
       </div>
     </article>
   );
@@ -450,11 +439,6 @@ function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const sortedPicks = useMemo(
-    () => [...filteredPicks].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "zh-CN")),
-    [filteredPicks]
-  );
-
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     window.location.assign("/");
@@ -489,7 +473,7 @@ function AdminDashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
         loading={loading}
         onEdit={(pick) => setEditor({ mode: "edit", form: pickToForm(pick) })}
         onRetry={refresh}
-        picks={sortedPicks}
+        picks={filteredPicks}
       />
       {editor ? (
         <PickEditorDialog
@@ -771,8 +755,7 @@ function PickEditorDialog({
       platform: normalizedForm.platform.trim(),
       link_type: normalizedForm.link_type,
       link_value: normalizedForm.link_value || null,
-      tags: splitTags(normalizedForm.tags),
-      sort_order: Number(normalizedForm.sort_order) || 0
+      tags: splitTags(normalizedForm.tags)
     };
 
     try {
@@ -895,14 +878,9 @@ function PickEditorDialog({
             <textarea value={form.intro} onChange={(event) => updateForm({ intro: event.target.value })} rows={4} />
           </Field>
 
-          <div className="form-grid">
-            <Field label="标签">
-              <input value={form.tags} onChange={(event) => updateForm({ tags: event.target.value })} placeholder="政治，体育，心理" />
-            </Field>
-            <Field label="排序">
-              <input inputMode="numeric" value={form.sort_order} onChange={(event) => updateForm({ sort_order: event.target.value })} />
-            </Field>
-          </div>
+          <Field label="标签">
+            <input value={form.tags} onChange={(event) => updateForm({ tags: event.target.value })} placeholder="政治，体育，心理" />
+          </Field>
 
           <UploadField
             imageSrc={avatarPreview ?? (form.avatar_image ? `/media/${form.avatar_image}` : null)}
@@ -1190,8 +1168,7 @@ function pickToForm(pick: PickItem): PickForm {
     platform: pick.platform,
     link_type: pick.link_type,
     link_value: pick.link_value ?? "",
-    tags: pick.tags.join("，"),
-    sort_order: String(pick.sort_order)
+    tags: pick.tags.join("，")
   };
 }
 

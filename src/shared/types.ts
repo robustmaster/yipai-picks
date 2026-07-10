@@ -10,7 +10,6 @@ export type PickItem = {
   link_type: PickLinkType;
   link_value: string | null;
   tags: string[];
-  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -23,7 +22,6 @@ export type PickInput = {
   link_type?: PickLinkType;
   link_value?: string | null;
   tags?: string[];
-  sort_order?: number;
 };
 
 export type SiteSettings = {
