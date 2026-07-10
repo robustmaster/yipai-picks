@@ -175,121 +175,115 @@ function PickGrid({
 }
 
 function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: PickItem }) {
-  return (
-    <article className={onEdit ? "pick-card admin-pick-card" : "pick-card"}>
-      {onEdit ? (
-        <IconButton
-          className="card-edit-button"
-          icon={<Pencil aria-hidden="true" size={15} />}
-          label={`编辑 ${pick.name}`}
-          onClick={() => onEdit(pick)}
-          size="sm"
-          type="button"
-          variant="secondary"
-        />
-      ) : null}
-      <div className="pick-card-head">
-        <Avatar pick={pick} />
-        <div className="pick-heading">
-          <h2>{pick.name}</h2>
-          {pick.platform ? <span>{pick.platform}</span> : null}
-        </div>
-      </div>
-      {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
-      {pick.tags.length || hasPickLink(pick) ? (
-        <div className="pick-card-foot">
-          <div className="pick-tags">
-            {pick.tags.map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-          {hasPickLink(pick) ? (
-            <div className="card-actions">
-              <PickLinkAction pick={pick} />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function PickLinkAction({ pick }: { pick: PickItem }) {
   const [viewerOpen, setViewerOpen] = useState(false);
-  const { showToast } = useToast();
-  if (!hasPickLink(pick)) return null;
-
-  if (pick.link_type === "url") {
-    return (
-      <a
-        className="button button-ghost button-sm card-link-button"
-        href={normalizeHref(pick.link_value)}
-        rel="noreferrer"
-        target="_blank"
-      >
-        <ExternalLink aria-hidden="true" size={14} />
-        <span>访问</span>
-      </a>
-    );
-  }
+  const canAccess = hasPickLink(pick);
+  const className = ["pick-card", onEdit ? "admin-pick-card" : "", canAccess ? "pick-card-clickable" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <>
-      <Button
-        className="card-link-button"
-        icon={<ExternalLink aria-hidden="true" size={14} />}
-        onClick={() => setViewerOpen(true)}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        访问
-      </Button>
-      {viewerOpen ? (
-        <Dialog
-          footer={
-            <div className="dialog-footer-actions">
-              {pick.link_type === "image" ? (
-                <a
-                  className="button button-secondary button-md"
-                  href={`/media/${pick.link_value}`}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <ExternalLink aria-hidden="true" size={16} />
-                  <span>新窗口打开</span>
-                </a>
-              ) : (
-                <Button
-                  icon={<Copy aria-hidden="true" size={16} />}
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(pick.link_value);
-                      showToast("文本已复制", "success");
-                    } catch {
-                      showToast("复制失败，请手动选择文本", "error");
-                    }
-                  }}
-                  type="button"
-                  variant="primary"
-                >
-                  复制文本
-                </Button>
-              )}
-            </div>
-          }
-          onClose={() => setViewerOpen(false)}
-          size="sm"
-          title={pick.name}
-        >
-          {pick.link_type === "image" ? (
-            <img className="link-image-preview" src={`/media/${pick.link_value}`} alt={`${pick.name} 链接图片`} />
+      <article className={className}>
+        {canAccess ? (
+          pick.link_type === "url" ? (
+            <a
+              aria-label={`访问 ${pick.name}`}
+              className="pick-card-target"
+              href={normalizeHref(pick.link_value)}
+              rel="noreferrer"
+              target="_blank"
+            />
           ) : (
-            <pre className="link-text-value">{pick.link_value}</pre>
-          )}
-        </Dialog>
+            <button
+              aria-label={`查看 ${pick.name} 的访问方式`}
+              className="pick-card-target"
+              onClick={() => setViewerOpen(true)}
+              type="button"
+            />
+          )
+        ) : null}
+        {onEdit ? (
+          <IconButton
+            className="card-edit-button"
+            icon={<Pencil aria-hidden="true" size={15} />}
+            label={`编辑 ${pick.name}`}
+            onClick={() => onEdit(pick)}
+            size="sm"
+            type="button"
+            variant="secondary"
+          />
+        ) : null}
+        <div className="pick-card-head">
+          <Avatar pick={pick} />
+          <div className="pick-heading">
+            <h2>{pick.name}</h2>
+            {pick.platform ? <span>{pick.platform}</span> : null}
+          </div>
+        </div>
+        {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
+        {pick.tags.length ? (
+          <div className="pick-card-foot">
+            <div className="pick-tags">
+              {pick.tags.map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </article>
+      {viewerOpen && canAccess && pick.link_type !== "url" ? (
+        <PickAccessDialog onClose={() => setViewerOpen(false)} pick={pick} />
       ) : null}
     </>
+  );
+}
+
+function PickAccessDialog({ onClose, pick }: { onClose: () => void; pick: PickItem & { link_value: string } }) {
+  const { showToast } = useToast();
+
+  return (
+    <Dialog
+      footer={
+        <div className="dialog-footer-actions">
+          {pick.link_type === "image" ? (
+            <a
+              className="button button-secondary button-md"
+              href={`/media/${pick.link_value}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink aria-hidden="true" size={16} />
+              <span>新窗口打开</span>
+            </a>
+          ) : (
+            <Button
+              icon={<Copy aria-hidden="true" size={16} />}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(pick.link_value);
+                  showToast("文本已复制", "success");
+                } catch {
+                  showToast("复制失败，请手动选择文本", "error");
+                }
+              }}
+              type="button"
+              variant="primary"
+            >
+              复制文本
+            </Button>
+          )}
+        </div>
+      }
+      onClose={onClose}
+      size="sm"
+      title={pick.name}
+    >
+      {pick.link_type === "image" ? (
+        <img className="link-image-preview" src={`/media/${pick.link_value}`} alt={`${pick.name} 链接图片`} />
+      ) : (
+        <pre className="link-text-value">{pick.link_value}</pre>
+      )}
+    </Dialog>
   );
 }
 
@@ -318,7 +312,6 @@ function PickGridSkeleton() {
           </div>
           <div className="pick-card-foot">
             <div className="skeleton skeleton-pill" />
-            <div className="skeleton skeleton-action" />
           </div>
         </div>
       ))}

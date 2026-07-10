@@ -336,11 +336,29 @@ p {
     transform 150ms ease;
 }
 
-.pick-card:hover,
-.pick-card:focus-within {
+.pick-card-clickable {
+  cursor: pointer;
+}
+
+.pick-card-clickable:hover,
+.pick-card-clickable:focus-within,
+.admin-pick-card:hover,
+.admin-pick-card:focus-within {
   border-color: var(--line-strong);
   box-shadow: 0 2px 4px rgba(21, 38, 33, 0.05), 0 14px 30px rgba(21, 38, 33, 0.07);
   transform: translateY(-1px);
+}
+
+.pick-card-target {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
 }
 
 .pick-card-head {
@@ -439,24 +457,9 @@ p {
   line-height: 1.2;
 }
 
-.card-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.card-actions .button {
-  min-height: 32px;
-  padding: 6px 8px;
-}
-
 .admin-pick-card > .card-edit-button {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   top: 12px;
   right: 12px;
   opacity: 0;
@@ -519,13 +522,6 @@ p {
   width: 52px;
   height: 26px;
   border-radius: 999px;
-}
-
-.skeleton-action {
-  width: 54px;
-  height: 32px;
-  margin-left: auto;
-  border-radius: 8px;
 }
 
 @keyframes shimmer {
