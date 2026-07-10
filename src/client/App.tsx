@@ -224,58 +224,60 @@ function PickLinkAction({ pick }: { pick: PickItem }) {
     );
   }
 
-  if (pick.link_type === "text") {
-    return (
-      <Button
-        icon={<Copy aria-hidden="true" size={14} />}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(pick.link_value);
-            showToast("链接文本已复制", "success");
-          } catch {
-            showToast("复制失败，请手动复制", "error");
-          }
-        }}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        复制
-      </Button>
-    );
-  }
-
   return (
     <>
       <Button
-        icon={<ImageIcon aria-hidden="true" size={14} />}
+        className="card-link-button"
+        icon={<ExternalLink aria-hidden="true" size={14} />}
         onClick={() => setViewerOpen(true)}
         size="sm"
         type="button"
         variant="ghost"
       >
-        查看图片
+        访问
       </Button>
       {viewerOpen ? (
         <Dialog
           footer={
             <div className="dialog-footer-actions">
-              <a
-                className="button button-secondary button-md"
-                href={`/media/${pick.link_value}`}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <ExternalLink aria-hidden="true" size={16} />
-                <span>新窗口打开</span>
-              </a>
+              {pick.link_type === "image" ? (
+                <a
+                  className="button button-secondary button-md"
+                  href={`/media/${pick.link_value}`}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" size={16} />
+                  <span>新窗口打开</span>
+                </a>
+              ) : (
+                <Button
+                  icon={<Copy aria-hidden="true" size={16} />}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(pick.link_value);
+                      showToast("文本已复制", "success");
+                    } catch {
+                      showToast("复制失败，请手动选择文本", "error");
+                    }
+                  }}
+                  type="button"
+                  variant="primary"
+                >
+                  复制文本
+                </Button>
+              )}
             </div>
           }
           onClose={() => setViewerOpen(false)}
           size="sm"
           title={pick.name}
         >
-          <img className="link-image-preview" src={`/media/${pick.link_value}`} alt={`${pick.name} 链接图片`} />
+          {pick.link_type === "image" ? (
+            <img className="link-image-preview" src={`/media/${pick.link_value}`} alt={`${pick.name} 链接图片`} />
+          ) : (
+            <pre className="link-text-value">{pick.link_value}</pre>
+          )}
         </Dialog>
       ) : null}
     </>

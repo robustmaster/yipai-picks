@@ -822,6 +822,22 @@ p {
   background: #ffffff;
 }
 
+.link-text-value {
+  max-height: 48vh;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--ink);
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.65;
+  user-select: text;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
