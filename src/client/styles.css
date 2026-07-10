@@ -326,10 +326,7 @@ p {
 
 .pick-card {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
+  padding: 14px 16px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease,
@@ -361,15 +358,23 @@ p {
   cursor: pointer;
 }
 
-.pick-card-head {
+.pick-card-layout {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-areas:
+    "avatar heading tags"
+    "avatar intro tags";
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  column-gap: 14px;
+  row-gap: 6px;
   align-items: center;
 }
 
-.admin-pick-card .pick-card-head {
-  padding-right: 34px;
+.admin-pick-card .pick-card-layout {
+  padding-right: 40px;
+}
+
+.pick-card-layout > .avatar {
+  grid-area: avatar;
 }
 
 .avatar {
@@ -390,7 +395,12 @@ p {
 }
 
 .pick-heading {
+  display: flex;
+  grid-area: heading;
   min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .pick-heading h2 {
@@ -405,7 +415,6 @@ p {
 .pick-heading span {
   display: inline-flex;
   max-width: 100%;
-  margin-top: 6px;
   border-radius: 999px;
   background: var(--surface-subtle);
   color: #53625d;
@@ -415,15 +424,9 @@ p {
   font-weight: 700;
 }
 
-.pick-card-foot {
-  display: flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .pick-intro {
+  grid-area: intro;
+  min-width: 0;
   margin: 0;
   color: #4c5b56;
   overflow-wrap: anywhere;
@@ -433,11 +436,11 @@ p {
 
 .pick-tags {
   display: flex;
-  min-width: 0;
-  min-height: 32px;
-  flex: 1 1 auto;
+  grid-area: tags;
+  max-width: 240px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -489,13 +492,15 @@ p {
   color: var(--muted);
 }
 
-.skeleton-card {
-  align-content: start;
-}
-
 .skeleton-stack {
   display: grid;
+  grid-area: heading;
   gap: 9px;
+}
+
+.skeleton-intro {
+  grid-area: intro;
+  width: 64%;
 }
 
 .skeleton {
@@ -981,8 +986,30 @@ p {
   }
 
   .pick-card {
-    gap: 12px;
     padding: 14px;
+  }
+
+  .pick-card-layout {
+    grid-template-areas:
+      "avatar heading"
+      "intro intro"
+      "tags tags";
+    grid-template-columns: 48px minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 10px;
+  }
+
+  .admin-pick-card .pick-card-layout {
+    padding-right: 0;
+  }
+
+  .admin-pick-card .pick-heading {
+    padding-right: 40px;
+  }
+
+  .pick-tags {
+    max-width: none;
+    justify-content: flex-start;
   }
 
   .admin-pick-card > .card-edit-button {

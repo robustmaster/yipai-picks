@@ -213,23 +213,21 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
             variant="secondary"
           />
         ) : null}
-        <div className="pick-card-head">
+        <div className="pick-card-layout">
           <Avatar pick={pick} />
           <div className="pick-heading">
             <h2>{pick.name}</h2>
             {pick.platform ? <span>{pick.platform}</span> : null}
           </div>
-        </div>
-        {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
-        {pick.tags.length ? (
-          <div className="pick-card-foot">
+          {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
+          {pick.tags.length ? (
             <div className="pick-tags">
               {pick.tags.map((tag) => (
                 <span key={tag}>{tag}</span>
               ))}
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </article>
       {viewerOpen && canAccess && pick.link_type !== "url" ? (
         <PickAccessDialog onClose={() => setViewerOpen(false)} pick={pick} />
@@ -303,15 +301,16 @@ function PickGridSkeleton() {
     <section className="pick-grid" aria-label="加载中">
       {Array.from({ length: 6 }).map((_, index) => (
         <div className="pick-card skeleton-card" key={index}>
-          <div className="pick-card-head">
+          <div className="pick-card-layout">
             <div className="skeleton avatar" />
             <div className="skeleton-stack">
               <div className="skeleton skeleton-line wide" />
               <div className="skeleton skeleton-line short" />
             </div>
-          </div>
-          <div className="pick-card-foot">
-            <div className="skeleton skeleton-pill" />
+            <div className="skeleton skeleton-line skeleton-intro" />
+            <div className="pick-tags">
+              <div className="skeleton skeleton-pill" />
+            </div>
           </div>
         </div>
       ))}
