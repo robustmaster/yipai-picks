@@ -42,7 +42,7 @@ create table picks (
 
 公开列表每次加载时随机排列，不提供手动排序。
 
-`site_settings` 是固定 `id = 1` 的单例设置表，用来保存网站名称、署名文字和署名链接。登录后台后，可从右上角账户菜单进入“网站设置”修改。
+`site_settings` 是固定 `id = 1` 的单例设置表，用来保存网站名称、署名、网站图标和统计代码。登录后台后，可从右上角账户菜单进入“网站设置”修改。网站图标保存高清原图到 R2，并同时用于浏览器图标和 Apple Touch Icon；统计代码只在公开首页执行。
 
 ## 本地开发
 
@@ -149,8 +149,9 @@ npx wrangler secret put ADMIN_USERNAME
 - `PUT /api/admin/picks/:id`: 更新
 - `DELETE /api/admin/picks/:id`: 删除
 - `PUT /api/admin/settings`: 更新网站设置
+- `POST /api/admin/site-icon`: 上传网站图标
 - `POST /api/admin/avatar`: 上传头像
 - `POST /api/admin/link-image`: 上传链接图片
-- `GET /media/:key`: 读取头像或链接图片
+- `GET /media/:key`: 读取头像、链接图片或网站图标
 
 后台 API 通过 HttpOnly Cookie 会话保护。必须配置运行时 Secret `ADMIN_PASSWORD` 后才能登录和写入数据；未配置时后台写接口会拒绝请求。

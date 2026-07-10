@@ -28,6 +28,8 @@ export type SiteSettings = {
   site_name: string;
   owner_label: string;
   owner_url: string;
+  favicon_image: string;
+  analytics_code: string;
 };
 
 export type SiteSettingsInput = SiteSettings;
@@ -35,5 +37,7 @@ export type SiteSettingsInput = SiteSettings;
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   site_name: "一派 Picks",
   owner_label: "@胡一派",
-  owner_url: "https://yipai.me"
+  owner_url: "https://yipai.me",
+  favicon_image: "",
+  analytics_code: ""
 };

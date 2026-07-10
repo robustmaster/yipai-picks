@@ -31,6 +31,9 @@ type PickImageReferenceRow = Pick<PickRow, "avatar_image" | "link_type" | "link_
 type SiteSettingsRow = SiteSettings & { updated_at: string };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_ANALYTICS_CODE_LENGTH = 20_000;
+const RASTER_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
+const SITE_ICON_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const ORPHAN_IMAGE_GRACE_MS = 24 * 60 * 60 * 1000;
 const ADMIN_COOKIE = "yipai_admin_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
@@ -75,7 +78,7 @@ export default {
       if (pathname === "/api/admin/settings" && request.method === "PUT") {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
-        return await updateSiteSettings(request, env);
+        return await updateSiteSettings(request, env, ctx);
       }
 
       const pickMatch = pathname.match(/^\/api\/admin\/picks\/([^/]+)$/);
@@ -101,6 +104,12 @@ export default {
         const adminResponse = await requireAdmin(request, env);
         if (adminResponse) return adminResponse;
         return await uploadImage(request, env, "links");
+      }
+
+      if (pathname === "/api/admin/site-icon" && request.method === "POST") {
+        const adminResponse = await requireAdmin(request, env);
+        if (adminResponse) return adminResponse;
+        return await uploadImage(request, env, "site-icons");
       }
 
       if (pathname.startsWith("/media/") && request.method === "GET") {
@@ -147,22 +156,36 @@ async function getSiteSettings(env: Env): Promise<Response> {
   return json({ settings: await readSiteSettings(env) });
 }
 
-async function updateSiteSettings(request: Request, env: Env): Promise<Response> {
+async function updateSiteSettings(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   await ensureSchema(env);
+  const previousSettings = await readSiteSettings(env);
   const settings = normalizeSiteSettings(await readJson(request));
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `insert into site_settings (id, site_name, owner_label, owner_url, updated_at)
-     values (1, ?, ?, ?, ?)
+    `insert into site_settings (id, site_name, owner_label, owner_url, favicon_image, analytics_code, updated_at)
+     values (1, ?, ?, ?, ?, ?, ?)
      on conflict(id) do update set
        site_name = excluded.site_name,
        owner_label = excluded.owner_label,
        owner_url = excluded.owner_url,
+       favicon_image = excluded.favicon_image,
+       analytics_code = excluded.analytics_code,
        updated_at = excluded.updated_at`
   )
-    .bind(settings.site_name, settings.owner_label, settings.owner_url, now)
+    .bind(
+      settings.site_name,
+      settings.owner_label,
+      settings.owner_url,
+      settings.favicon_image,
+      settings.analytics_code,
+      now
+    )
     .run();
+
+  if (previousSettings.favicon_image !== settings.favicon_image) {
+    scheduleUnreferencedImageCleanup(ctx, env, [previousSettings.favicon_image]);
+  }
 
   return json({ settings });
 }
@@ -170,11 +193,17 @@ async function updateSiteSettings(request: Request, env: Env): Promise<Response>
 async function readSiteSettings(env: Env): Promise<SiteSettings> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
-    "select site_name, owner_label, owner_url, updated_at from site_settings where id = 1"
+    "select site_name, owner_label, owner_url, favicon_image, analytics_code, updated_at from site_settings where id = 1"
   ).first<SiteSettingsRow>();
 
   return row
-    ? { site_name: row.site_name, owner_label: row.owner_label, owner_url: row.owner_url }
+    ? {
+        site_name: row.site_name,
+        owner_label: row.owner_label,
+        owner_url: row.owner_url,
+        favicon_image: row.favicon_image || "",
+        analytics_code: row.analytics_code || ""
+      }
     : DEFAULT_SITE_SETTINGS;
 }
 
@@ -274,7 +303,11 @@ async function getPickById(id: string, env: Env): Promise<PickItem | null> {
   return row ? toPickItem(row) : null;
 }
 
-async function uploadImage(request: Request, env: Env, folder: "avatars" | "links"): Promise<Response> {
+async function uploadImage(
+  request: Request,
+  env: Env,
+  folder: "avatars" | "links" | "site-icons"
+): Promise<Response> {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > MAX_IMAGE_BYTES) {
     return json({ error: "Image must be smaller than 5MB" }, { status: 413 });
@@ -286,8 +319,9 @@ async function uploadImage(request: Request, env: Env, folder: "avatars" | "link
     return json({ error: "Missing image file" }, { status: 400 });
   }
 
-  if (!file.type.startsWith("image/")) {
-    return json({ error: "Only image files are allowed" }, { status: 400 });
+  const allowedTypes = folder === "site-icons" ? SITE_ICON_TYPES : RASTER_IMAGE_TYPES;
+  if (!allowedTypes.has(file.type)) {
+    return json({ error: "Unsupported image format" }, { status: 400 });
   }
 
   if (file.size > MAX_IMAGE_BYTES) {
@@ -377,12 +411,19 @@ async function cleanupOrphanedImages(env: Env, scheduledTime: number): Promise<v
 async function getReferencedImageKeys(env: Env): Promise<Set<string>> {
   await ensureSchema(env);
   const { results } = await env.DB.prepare("select avatar_image, link_type, link_value from picks").all<PickImageReferenceRow>();
+  const settings = await env.DB.prepare("select favicon_image from site_settings where id = 1").first<{
+    favicon_image: string | null;
+  }>();
   const keys = new Set<string>();
 
   for (const row of results ?? []) {
     for (const key of imageKeysForPick(row)) {
       keys.add(key);
     }
+  }
+
+  if (isManagedImageKey(settings?.favicon_image)) {
+    keys.add(settings.favicon_image);
   }
 
   return keys;
@@ -423,7 +464,7 @@ async function createSchema(env: Env): Promise<void> {
       )`
   ).run();
 
-  await ensureColumns(env, [
+  await ensureColumns(env, "picks", [
     ["link_type", "alter table picks add column link_type text not null default ''"],
     ["link_value", "alter table picks add column link_value text"]
   ]);
@@ -434,31 +475,52 @@ async function createSchema(env: Env): Promise<void> {
        site_name text not null,
        owner_label text not null default '',
        owner_url text not null default '',
+       favicon_image text not null default '',
+       analytics_code text not null default '',
        updated_at text not null
      )`
   ).run();
 
+  await ensureColumns(env, "site_settings", [
+    ["favicon_image", "alter table site_settings add column favicon_image text not null default ''"],
+    ["analytics_code", "alter table site_settings add column analytics_code text not null default ''"]
+  ]);
+
   await env.DB.prepare(
-    `insert or ignore into site_settings (id, site_name, owner_label, owner_url, updated_at)
-     values (1, ?, ?, ?, ?)`
+    `insert or ignore into site_settings
+       (id, site_name, owner_label, owner_url, favicon_image, analytics_code, updated_at)
+     values (1, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       DEFAULT_SITE_SETTINGS.site_name,
       DEFAULT_SITE_SETTINGS.owner_label,
       DEFAULT_SITE_SETTINGS.owner_url,
+      DEFAULT_SITE_SETTINGS.favicon_image,
+      DEFAULT_SITE_SETTINGS.analytics_code,
       new Date().toISOString()
     )
     .run();
 }
 
-async function ensureColumns(env: Env, columns: [string, string][]): Promise<void> {
-  const { results } = await env.DB.prepare("pragma table_info(picks)").all<{ name: string }>();
+async function ensureColumns(
+  env: Env,
+  table: "picks" | "site_settings",
+  columns: [string, string][]
+): Promise<void> {
+  const { results } = await env.DB.prepare(`pragma table_info(${table})`).all<{ name: string }>();
   const existingColumns = new Set((results ?? []).map((column) => column.name));
   const missingColumns = columns.filter(([name]) => !existingColumns.has(name));
 
   if (!missingColumns.length) return;
 
-  await env.DB.batch(missingColumns.map(([, statement]) => env.DB.prepare(statement)));
+  for (const [, statement] of missingColumns) {
+    try {
+      await env.DB.prepare(statement).run();
+    } catch (error) {
+      if (error instanceof Error && /duplicate column name/i.test(error.message)) continue;
+      throw error;
+    }
+  }
 }
 
 function normalizePickInput(value: unknown): Required<PickInput> {
@@ -486,11 +548,19 @@ function normalizeSiteSettings(value: unknown): SiteSettingsInput {
   const siteName = stringValue(input.site_name).trim();
   const ownerLabel = stringValue(input.owner_label).trim();
   const ownerUrl = stringValue(input.owner_url).trim();
+  const faviconImage = stringValue(input.favicon_image).trim();
+  const analyticsCode = stringValue(input.analytics_code).trim();
 
   if (!siteName) throw new HttpError("Site name is required", 400);
   if (siteName.length > 60) throw new HttpError("Site name must be 60 characters or fewer", 400);
   if (ownerLabel.length > 40) throw new HttpError("Owner label must be 40 characters or fewer", 400);
   if (ownerUrl.length > 500) throw new HttpError("Owner URL must be 500 characters or fewer", 400);
+  if (faviconImage && !isManagedSiteIconKey(faviconImage)) {
+    throw new HttpError("Site icon must be uploaded through the site icon endpoint", 400);
+  }
+  if (analyticsCode.length > MAX_ANALYTICS_CODE_LENGTH) {
+    throw new HttpError(`Analytics code must be ${MAX_ANALYTICS_CODE_LENGTH} characters or fewer`, 400);
+  }
 
   if (ownerUrl) {
     try {
@@ -503,7 +573,13 @@ function normalizeSiteSettings(value: unknown): SiteSettingsInput {
     }
   }
 
-  return { site_name: siteName, owner_label: ownerLabel, owner_url: ownerUrl };
+  return {
+    site_name: siteName,
+    owner_label: ownerLabel,
+    owner_url: ownerUrl,
+    favicon_image: faviconImage,
+    analytics_code: analyticsCode
+  };
 }
 
 function toPickItem(row: PickRow): PickItem {
@@ -774,8 +850,12 @@ function isManagedImageKey(value: unknown): value is string {
   return (
     typeof value === "string" &&
     isSafeObjectKey(value) &&
-    (value.startsWith("avatars/") || value.startsWith("links/"))
+    (value.startsWith("avatars/") || value.startsWith("links/") || value.startsWith("site-icons/"))
   );
+}
+
+function isManagedSiteIconKey(value: unknown): value is string {
+  return typeof value === "string" && isSafeObjectKey(value) && value.startsWith("site-icons/");
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {

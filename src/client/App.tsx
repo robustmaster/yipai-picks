@@ -48,6 +48,10 @@ type SiteSettingsErrors = Partial<Record<keyof SiteSettings, string>>;
 type EditorState = { mode: "create" | "edit"; form: PickForm };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_ANALYTICS_CODE_LENGTH = 20_000;
+const SITE_ICON_ACCEPT = "image/png,image/jpeg,image/webp,image/avif";
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
+const SITE_ICON_TYPES = new Set(SITE_ICON_ACCEPT.split(","));
 const emptyForm: PickForm = {
   name: "",
   avatar_image: "",
@@ -67,6 +71,7 @@ function PublicPage() {
   const { picks, loading, error, refresh } = usePicks();
   const { settings } = useSiteSettings();
   const { activeTag, filteredPicks, setActiveTag, tags } = useTagFilter(picks);
+  useAnalyticsCode(settings.analytics_code);
 
   return (
     <main className="page-shell">
@@ -202,17 +207,6 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
             />
           )
         ) : null}
-        {onEdit ? (
-          <IconButton
-            className="card-edit-button"
-            icon={<Pencil aria-hidden="true" size={15} />}
-            label={`编辑 ${pick.name}`}
-            onClick={() => onEdit(pick)}
-            size="sm"
-            type="button"
-            variant="secondary"
-          />
-        ) : null}
         <div className="pick-card-layout">
           <Avatar pick={pick} />
           <div className="pick-heading">
@@ -226,6 +220,17 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
                 <span key={tag}>{tag}</span>
               ))}
             </div>
+          ) : null}
+          {onEdit ? (
+            <IconButton
+              className="card-edit-button"
+              icon={<Pencil aria-hidden="true" size={15} />}
+              label={`编辑 ${pick.name}`}
+              onClick={() => onEdit(pick)}
+              size="sm"
+              type="button"
+              variant="secondary"
+            />
           ) : null}
         </div>
       </article>
@@ -556,13 +561,20 @@ function SiteSettingsDialog({
   const [form, setForm] = useState<SiteSettings>(initialSettings);
   const [errors, setErrors] = useState<SiteSettingsErrors>({});
   const [saving, setSaving] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const dirty = JSON.stringify(form) !== JSON.stringify(initialSettings);
   const validationErrors = validateSiteSettings(form);
   const valid = Object.keys(validationErrors).length === 0;
+  const busy = saving || uploadingFavicon;
+
+  useEffect(() => () => {
+    if (faviconPreview) URL.revokeObjectURL(faviconPreview);
+  }, [faviconPreview]);
 
   function requestClose() {
-    if (saving) return;
+    if (busy) return;
     if (dirty) setConfirmDiscard(true);
     else onClose();
   }
@@ -581,7 +593,9 @@ function SiteSettingsDialog({
     const payload: SiteSettingsInput = {
       site_name: form.site_name.trim(),
       owner_label: form.owner_label.trim(),
-      owner_url: form.owner_url.trim()
+      owner_url: form.owner_url.trim(),
+      favicon_image: form.favicon_image.trim(),
+      analytics_code: form.analytics_code.trim()
     };
 
     setSaving(true);
@@ -603,6 +617,37 @@ function SiteSettingsDialog({
     }
   }
 
+  async function uploadFavicon(file: File) {
+    const fileError = validateSiteIconFile(file);
+    if (fileError) {
+      showToast(fileError, "error");
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    setFaviconPreview(preview);
+    setUploadingFavicon(true);
+
+    const data = new FormData();
+    data.set("file", file);
+    try {
+      const response = await fetch("/api/admin/site-icon", {
+        method: "POST",
+        credentials: "same-origin",
+        body: data
+      });
+      const upload = await parseResponse<UploadResponse>(response);
+      setForm((current) => ({ ...current, favicon_image: upload.key }));
+      showToast("网站图标上传完成", "success");
+    } catch (error) {
+      if (isUnauthorizedError(error)) onUnauthorized();
+      showToast(errorMessage(error), "error");
+      setFaviconPreview(null);
+    } finally {
+      setUploadingFavicon(false);
+    }
+  }
+
   return (
     <>
       <Dialog
@@ -612,7 +657,7 @@ function SiteSettingsDialog({
               取消
             </Button>
             <Button
-              disabled={!dirty || !valid}
+              disabled={!dirty || !valid || uploadingFavicon}
               form="site-settings-form"
               loading={saving}
               type="submit"
@@ -623,7 +668,7 @@ function SiteSettingsDialog({
           </div>
         }
         onClose={requestClose}
-        size="sm"
+        size="md"
         title="网站设置"
       >
         <form className="pick-form" id="site-settings-form" onSubmit={saveSettings}>
@@ -654,6 +699,34 @@ function SiteSettingsDialog({
               placeholder="https://yipai.me"
               type="url"
               value={form.owner_url}
+            />
+          </Field>
+          <UploadField
+            accept={SITE_ICON_ACCEPT}
+            hint="PNG、JPG、WebP、AVIF，建议 512×512，最大 5MB"
+            imageSrc={faviconPreview ?? (form.favicon_image ? `/media/${form.favicon_image}` : null)}
+            label="网站图标"
+            loading={uploadingFavicon}
+            onFile={(file) => void uploadFavicon(file)}
+            onRemove={() => {
+              setFaviconPreview(null);
+              setForm((current) => ({ ...current, favicon_image: "" }));
+            }}
+          />
+          <Field
+            label="统计代码"
+            error={errors.analytics_code}
+            meta={`仅公开首页执行 · ${form.analytics_code.length}/${MAX_ANALYTICS_CODE_LENGTH}`}
+          >
+            <textarea
+              className="analytics-code-input"
+              maxLength={MAX_ANALYTICS_CODE_LENGTH}
+              onBlur={() => validateField("analytics_code")}
+              onChange={(event) => setForm((current) => ({ ...current, analytics_code: event.target.value }))}
+              placeholder={'<script defer src="https://example.com/analytics.js"></script>'}
+              rows={7}
+              spellCheck={false}
+              value={form.analytics_code}
             />
           </Field>
         </form>
@@ -1019,6 +1092,8 @@ function Field({
 }
 
 function UploadField({
+  accept = "image/png,image/jpeg,image/gif,image/webp,image/avif",
+  hint = "PNG、JPG、GIF、WebP、AVIF，最大 5MB",
   imageSrc,
   label,
   loading,
@@ -1026,6 +1101,8 @@ function UploadField({
   onRemove,
   preserveRatio = false
 }: {
+  accept?: string;
+  hint?: string;
   imageSrc: string | null;
   label: string;
   loading: boolean;
@@ -1040,14 +1117,14 @@ function UploadField({
       </div>
       <div className="upload-copy">
         <strong>{label}</strong>
-        <span>PNG、JPG、WebP，最大 5MB</span>
+        <span>{hint}</span>
       </div>
       <div className="upload-actions">
         <label className={loading ? "button button-secondary button-sm file-trigger disabled" : "button button-secondary button-sm file-trigger"}>
           <Upload aria-hidden="true" size={15} />
           <span>{loading ? "上传中" : imageSrc ? "替换" : "上传"}</span>
           <input
-            accept="image/*"
+            accept={accept}
             disabled={loading}
             type="file"
             onChange={(event) => {
@@ -1109,9 +1186,64 @@ function useSiteSettings() {
 
   useEffect(() => {
     document.title = settings.site_name;
-  }, [settings.site_name]);
+    const faviconUrl = settings.favicon_image ? `/media/${settings.favicon_image}` : "";
+    setSiteIconLink("icon", faviconUrl);
+    setSiteIconLink("apple-touch-icon", faviconUrl);
+  }, [settings.favicon_image, settings.site_name]);
 
   return { settings, setSettings };
+}
+
+function setSiteIconLink(rel: "icon" | "apple-touch-icon", href: string) {
+  const selector = `link[data-yipai-site-icon="${rel}"]`;
+  let link = document.head.querySelector<HTMLLinkElement>(selector);
+
+  if (!href) {
+    link?.remove();
+    return;
+  }
+
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = rel;
+    link.dataset.yipaiSiteIcon = rel;
+    document.head.appendChild(link);
+  }
+  link.href = href;
+}
+
+function useAnalyticsCode(code: string) {
+  useEffect(() => {
+    const analyticsCode = code.trim();
+    if (!analyticsCode) return;
+
+    const template = document.createElement("template");
+    template.innerHTML = analyticsCode;
+    const sourceScripts = Array.from(template.content.querySelectorAll("script"));
+    sourceScripts.forEach((script) => script.remove());
+
+    const container = document.createElement("div");
+    container.hidden = true;
+    container.dataset.yipaiAnalytics = "content";
+    container.appendChild(template.content.cloneNode(true));
+    if (container.childNodes.length) document.body.appendChild(container);
+
+    const scripts = sourceScripts.map((source) => {
+      const script = document.createElement("script");
+      for (const attribute of Array.from(source.attributes)) {
+        script.setAttribute(attribute.name, attribute.value);
+      }
+      script.dataset.yipaiAnalytics = "script";
+      script.textContent = source.textContent;
+      document.head.appendChild(script);
+      return script;
+    });
+
+    return () => {
+      scripts.forEach((script) => script.remove());
+      container.remove();
+    };
+  }, [code]);
 }
 
 function useTagFilter(picks: PickItem[]) {
@@ -1192,6 +1324,9 @@ function validateSiteSettings(settings: SiteSettings): SiteSettingsErrors {
   if (!siteName) errors.site_name = "请输入网站名称";
   else if (siteName.length > 60) errors.site_name = "网站名称不能超过 60 个字符";
   if (ownerLabel.length > 40) errors.owner_label = "署名文字不能超过 40 个字符";
+  if (settings.analytics_code.length > MAX_ANALYTICS_CODE_LENGTH) {
+    errors.analytics_code = `统计代码不能超过 ${MAX_ANALYTICS_CODE_LENGTH} 个字符`;
+  }
 
   if (ownerUrl) {
     try {
@@ -1206,7 +1341,13 @@ function validateSiteSettings(settings: SiteSettings): SiteSettingsErrors {
 }
 
 function validateImageFile(file: File): string {
-  if (!file.type.startsWith("image/")) return "仅支持图片文件";
+  if (!SUPPORTED_IMAGE_TYPES.has(file.type)) return "仅支持 PNG、JPG、GIF、WebP 或 AVIF 图片";
+  if (file.size > MAX_IMAGE_BYTES) return "图片不能超过 5MB";
+  return "";
+}
+
+function validateSiteIconFile(file: File): string {
+  if (!SITE_ICON_TYPES.has(file.type)) return "网站图标仅支持 PNG、JPG、WebP 或 AVIF 图片";
   if (file.size > MAX_IMAGE_BYTES) return "图片不能超过 5MB";
   return "";
 }
