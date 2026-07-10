@@ -196,18 +196,20 @@ function PickCard({ onEdit, pick }: { onEdit?: (pick: PickItem) => void; pick: P
         </div>
       </div>
       {pick.intro ? <p className="pick-intro">{pick.intro}</p> : null}
-      <div className="pick-card-foot">
-        <div className="pick-tags">
-          {pick.tags.map((tag) => (
-            <span key={tag}>{tag}</span>
-          ))}
-        </div>
-        {hasPickLink(pick) ? (
-          <div className="card-actions">
-            <PickLinkAction pick={pick} />
+      {pick.tags.length || hasPickLink(pick) ? (
+        <div className="pick-card-foot">
+          <div className="pick-tags">
+            {pick.tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
           </div>
-        ) : null}
-      </div>
+          {hasPickLink(pick) ? (
+            <div className="card-actions">
+              <PickLinkAction pick={pick} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

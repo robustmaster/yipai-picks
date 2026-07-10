@@ -311,8 +311,7 @@ p {
 
 .pick-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -329,8 +328,8 @@ p {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease,
@@ -980,20 +979,14 @@ p {
   }
 }
 
-@media (max-width: 720px) {
-  .pick-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 620px) {
-  .pick-grid,
   .form-grid {
     grid-template-columns: 1fr;
   }
 
   .pick-card {
-    padding: 16px;
+    gap: 12px;
+    padding: 14px;
   }
 
   .admin-pick-card > .card-edit-button {
