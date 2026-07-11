@@ -1186,7 +1186,9 @@ function useSiteSettings() {
 
   useEffect(() => {
     document.title = settings.site_name;
-    const faviconUrl = settings.favicon_image ? `/media/${settings.favicon_image}` : "";
+    const faviconUrl = settings.favicon_image
+      ? `/favicon?v=${encodeURIComponent(settings.favicon_image)}`
+      : "";
     setSiteIconLink("icon", faviconUrl);
     setSiteIconLink("apple-touch-icon", faviconUrl);
   }, [settings.favicon_image, settings.site_name]);
@@ -1199,7 +1201,7 @@ function setSiteIconLink(rel: "icon" | "apple-touch-icon", href: string) {
   let link = document.head.querySelector<HTMLLinkElement>(selector);
 
   if (!href) {
-    link?.remove();
+    if (link) link.href = "/favicon";
     return;
   }
 
@@ -1207,6 +1209,7 @@ function setSiteIconLink(rel: "icon" | "apple-touch-icon", href: string) {
     link = document.createElement("link");
     link.rel = rel;
     link.dataset.yipaiSiteIcon = rel;
+    if (rel === "icon") link.sizes = "any";
     document.head.appendChild(link);
   }
   link.href = href;

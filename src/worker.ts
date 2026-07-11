@@ -53,6 +53,14 @@ export default {
         return await getSiteSettings(env);
       }
 
+      if ((pathname === "/favicon" || pathname === "/favicon.ico") && request.method === "GET") {
+        return await getSiteIcon(env);
+      }
+
+      if (pathname === "/site.webmanifest" && request.method === "GET") {
+        return await getSiteManifest(env);
+      }
+
       if (pathname === "/api/admin/login" && request.method === "POST") {
         return await loginAdmin(request, env);
       }
@@ -154,6 +162,56 @@ async function listPicks(env: Env): Promise<Response> {
 
 async function getSiteSettings(env: Env): Promise<Response> {
   return json({ settings: await readSiteSettings(env) });
+}
+
+async function getSiteIcon(env: Env): Promise<Response> {
+  const settings = await readSiteSettings(env);
+  if (!isManagedSiteIconKey(settings.favicon_image)) {
+    return new Response(null, { status: 404 });
+  }
+
+  const object = await env.IMAGES.get(settings.favicon_image);
+  if (!object) {
+    return new Response(null, { status: 404 });
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("cache-control", "public, max-age=3600, must-revalidate");
+
+  return new Response(object.body, { headers });
+}
+
+async function getSiteManifest(env: Env): Promise<Response> {
+  const settings = await readSiteSettings(env);
+  const icons = settings.favicon_image
+    ? [
+        {
+          src: `/favicon?v=${encodeURIComponent(settings.favicon_image)}`,
+          sizes: "any",
+          purpose: "any"
+        }
+      ]
+    : [];
+
+  return new Response(
+    JSON.stringify({
+      name: settings.site_name,
+      short_name: settings.site_name,
+      start_url: "/",
+      display: "standalone",
+      background_color: "#f7faf8",
+      theme_color: "#0f6b5d",
+      icons
+    }),
+    {
+      headers: {
+        "cache-control": "public, max-age=3600, must-revalidate",
+        "content-type": "application/manifest+json; charset=utf-8"
+      }
+    }
+  );
 }
 
 async function updateSiteSettings(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
